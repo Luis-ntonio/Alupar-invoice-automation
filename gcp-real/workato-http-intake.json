@@ -1,0 +1,31 @@
+{
+  "connection": {
+    "base_url": "https://<tu-cloud-run-url>",
+    "headers": {
+      "x-workato-secret": "<WORKATO_SHARED_SECRET>"
+    }
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/intake",
+    "content_type": "multipart/form-data",
+    "fields": [
+      { "name": "messageId", "value": "{{mail.message_id}}" },
+      { "name": "sender", "value": "{{mail.from}}" },
+      { "name": "subject", "value": "{{mail.subject}}" },
+      { "name": "receivedAt", "value": "{{mail.received_at}}" }
+    ],
+    "files": [
+      {
+        "field_name": "files",
+        "file_name": "{{attachment.name}}",
+        "content": "{{attachment.content_bytes}}",
+        "mime_type": "{{attachment.content_type}}"
+      }
+    ]
+  },
+  "expected_response": {
+    "status": 202,
+    "body_fields": ["requestId", "accepted", "rejected", "documents"]
+  }
+}

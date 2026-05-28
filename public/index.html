@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard de Facturas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="bg-layer"></div>
+    <main class="layout">
+      <header class="hero">
+        <p class="hero-kicker">Proyecto2 • Cloud Run</p>
+        <h1>Centro de Procesamiento de Facturas PDF/XML</h1>
+        <p class="hero-subtitle">
+          Visualiza documentos clasificados, filtra por tipo/empresa y exporta en ZIP seleccionando registros.
+        </p>
+      </header>
+
+      <section class="panel">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <label for="documentType">Tipo</label>
+            <select id="documentType">
+              <option value="">Todos</option>
+              <option value="factura">Factura</option>
+              <option value="comprobante">Comprobante</option>
+              <option value="nota">Nota</option>
+              <option value="desconocido">Desconocido</option>
+            </select>
+          </div>
+
+          <div class="toolbar-group">
+            <label for="status">Estado</label>
+            <select id="status">
+              <option value="">Todos</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="procesado">Exportado</option>
+              <option value="error">Error</option>
+            </select>
+          </div>
+
+          <div class="toolbar-group">
+            <label for="empresaFilter">Empresa</label>
+            <select id="empresaFilter">
+              <option value="">Todas las empresas</option>
+            </select>
+          </div>
+
+          <button id="refreshBtn">Actualizar</button>
+        </div>
+
+        <div class="cards" id="summary"></div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-check"><input type="checkbox" id="checkAll" title="Seleccionar todo" /></th>
+                <th>Fecha</th>
+                <th>Empresa</th>
+                <th>RUC</th>
+                <th>Asunto</th>
+                <th>Tipo Doc</th>
+                <th>Concepto</th>
+                <th>Monto</th>
+                <th>Estado</th>
+                <th>Archivos</th>
+              </tr>
+            </thead>
+            <tbody id="documentsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel export-panel">
+        <h2>Exportar ZIP</h2>
+        <p class="muted">Selecciona documentos en la tabla y genera el archivo ZIP.</p>
+        <div class="export-form">
+          <button id="selectAllBtn" class="btn-secondary">Seleccionar todos</button>
+          <button id="deselectAllBtn" class="btn-secondary">Deseleccionar todos</button>
+          <button id="exportBtn">Generar ZIP</button>
+        </div>
+        <p id="exportResult" class="muted"></p>
+      </section>
+
+      <section class="panel chart-panel" id="chartPanel" style="display:none">
+        <h2>Variación histórica de monto por empresa</h2>
+        <div class="chart-wrap">
+          <canvas id="montoChart"></canvas>
+        </div>
+      </section>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

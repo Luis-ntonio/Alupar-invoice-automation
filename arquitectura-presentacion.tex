@@ -1,0 +1,441 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usecolortheme{whale}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+\usepackage{booktabs}
+\usepackage{fontawesome5}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{colortbl}
+
+% ── Paleta de colores ──────────────────────────────────────────────
+\definecolor{gcpBlue}{HTML}{1A73E8}
+\definecolor{gcpGreen}{HTML}{34A853}
+\definecolor{gcpYellow}{HTML}{FBBC04}
+\definecolor{gcpRed}{HTML}{EA4335}
+\definecolor{localGreen}{HTML}{2E7D32}
+\definecolor{localBg}{HTML}{E8F5E9}
+\definecolor{gcpBg}{HTML}{E3F2FD}
+\definecolor{darkBg}{HTML}{1E2A38}
+
+\setbeamercolor{palette primary}{bg=gcpBlue,fg=white}
+\setbeamercolor{palette secondary}{bg=gcpBlue!80,fg=white}
+\setbeamercolor{palette tertiary}{bg=gcpBlue!60,fg=white}
+\setbeamercolor{frametitle}{bg=gcpBlue,fg=white}
+\setbeamercolor{title}{fg=white}
+\setbeamercolor{structure}{fg=gcpBlue}
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+
+% ── Estilos TikZ ──────────────────────────────────────────────────
+\tikzset{
+  box/.style={
+    rectangle, rounded corners=4pt,
+    minimum width=3.2cm, minimum height=0.6cm,
+    text centered, font=\scriptsize\bfseries,
+    draw=#1!80, fill=#1!15, text=#1!90
+  },
+  boxW/.style={box=gcpBlue, minimum width=2.8cm},
+  boxL/.style={box=localGreen},
+  boxG/.style={box=gcpBlue},
+  boxN/.style={box=darkBg, fill=gray!10},
+  decision/.style={
+    diamond, aspect=2.2,
+    minimum width=2.8cm, minimum height=0.7cm,
+    text centered, font=\tiny\bfseries,
+    draw=gcpYellow!80!black, fill=gcpYellow!20
+  },
+  arrow/.style={-Stealth, thick, color=gray!70},
+  arrowB/.style={-Stealth, thick, color=gcpBlue},
+  arrowG/.style={-Stealth, thick, color=localGreen},
+  annot/.style={font=\tiny, text=gray!70, inner sep=1pt}
+}
+
+% ── Metadatos ─────────────────────────────────────────────────────
+\title[Sistema de Facturas PDF/XML]{\textbf{Sistema de Automatización de Facturas}\\\large Arquitectura técnica y flujo operativo}
+\subtitle{Alupar | La Virgen · Proyecto 2}
+\author{Equipo de Automatización}
+\date{Mayo 2026}
+
+\begin{document}
+
+% ─────────────────────────────────────────────────────────────────
+% PORTADA
+% ─────────────────────────────────────────────────────────────────
+\begin{frame}
+\titlepage
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────────
+% AGENDA
+% ─────────────────────────────────────────────────────────────────
+\begin{frame}{Contenido}
+\tableofcontents
+\end{frame}
+
+\section{Flujo de procesamiento}
+\section{Recursos GCP}
+\section{Rol de Workato}
+\section{Costos estimados}
+
+% ─────────────────────────────────────────────────────────────────
+% SLIDE: FLUJO COMPLETO (parte 1)
+% ─────────────────────────────────────────────────────────────────
+\begin{frame}{Flujo de procesamiento · Entrada y validación}
+\begin{center}
+\begin{tikzpicture}[node distance=0.42cm and 1.1cm,
+  scale=0.82, every node/.append style={transform shape}]
+
+  % Origen
+  \node[boxW] (workato) {Workato / Postman};
+
+  % Intake
+  \node[boxN, below=of workato] (intake) {POST /api/intake};
+
+  % Auth
+  \node[decision, below=of intake] (auth) {¿Secret válido?};
+
+  % 401
+  \node[box=gcpRed, right=1.6cm of auth] (r401) {401 Unauthorized};
+
+  % Tipo
+  \node[decision, below=of auth] (ftype) {Tipo de archivo};
+
+  % Rejected
+  \node[box=gcpRed, right=1.6cm of ftype] (rej) {rejected++};
+
+  % Hash
+  \node[boxN, below=of ftype] (hash) {SHA-256 del buffer};
+
+  % Dedup
+  \node[decision, below=of hash] (dedup) {¿Ya existe?};
+
+  % Skip
+  \node[box=gcpGreen, right=1.6cm of dedup] (skip) {Devuelve existente};
+
+  % Guardar archivo
+  \node[boxN, below=of dedup] (save) {Guardar archivo original};
+
+  % Flechas
+  \draw[arrow] (workato) -- (intake);
+  \draw[arrow] (intake)  -- (auth);
+  \draw[arrow] (auth)    -- node[annot, left]{sí} (ftype);
+  \draw[arrow] (auth)    -- node[annot, above]{no} (r401);
+  \draw[arrow] (ftype)   -- node[annot, left]{pdf/xml} (hash);
+  \draw[arrow] (ftype)   -- node[annot, above]{unknown} (rej);
+  \draw[arrow] (hash)    -- (dedup);
+  \draw[arrow] (dedup)   -- node[annot, left]{no} (save);
+  \draw[arrow] (dedup)   -- node[annot, above]{sí} (skip);
+
+  % Leyenda
+  \begin{scope}[on background layer]
+    \node[fill=localBg, rounded corners, opacity=0.5,
+      fit=(workato)(intake)(auth)(ftype)(hash)(dedup)(save)(r401)(rej)(skip),
+      inner sep=4pt] {};
+  \end{scope}
+
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────────
+% SLIDE: FLUJO COMPLETO (parte 2 - bifurcación Local vs GCP)
+% ─────────────────────────────────────────────────────────────────
+\begin{frame}{Flujo de procesamiento · Extracción y persistencia}
+\begin{columns}[T]
+
+% ── Columna LOCAL ──────────────────────────────────
+\begin{column}{0.47\textwidth}
+  \begin{block}{\textcolor{localGreen}{\faLaptopCode\ \ Entorno LOCAL}}
+    \begin{center}
+    \begin{tikzpicture}[node distance=0.52cm]
+      \node[boxL] (ls)  {storage/raw/<id>/};
+      \node[boxL, below=of ls] (lp)  {pdf-parse + regex};
+      \node[boxL, below=of lp] (lx)  {xml2js (XML)};
+      \node[boxL, below=of lx] (lc)  {classifyDocument};
+      \node[boxL, below=of lc] (li)  {inferConcept};
+      \node[boxL, below=of li] (ld)  {data/documents.json};
+      \draw[arrowG] (ls) -- (lp);
+      \draw[arrowG] (lp) -- (lx);
+      \draw[arrowG] (lx) -- (lc);
+      \draw[arrowG] (lc) -- (li);
+      \draw[arrowG] (li) -- (ld);
+    \end{tikzpicture}
+    \end{center}
+  \end{block}
+\end{column}
+
+% ── Columna GCP ────────────────────────────────────
+\begin{column}{0.47\textwidth}
+  \begin{block}{\textcolor{gcpBlue}{\faCloud\ \ Entorno GCP (Cloud Run)}}
+    \begin{center}
+    \begin{tikzpicture}[node distance=0.52cm]
+      \node[boxG] (gs)  {Cloud Storage (RAW bucket)};
+      \node[boxG, below=of gs] (gp)  {Document AI · Invoice Processor};
+      \node[boxG, below=of gp] (gx)  {xml2js (XML)};
+      \node[boxG, below=of gx] (gc)  {classifyDocument};
+      \node[boxG, below=of gc] (gi)  {inferConcept};
+      \node[boxG, below=of gi] (gd)  {Firestore · colección documents};
+      \draw[arrowB] (gs) -- (gp);
+      \draw[arrowB] (gp) -- (gx);
+      \draw[arrowB] (gx) -- (gc);
+      \draw[arrowB] (gc) -- (gi);
+      \draw[arrowB] (gi) -- (gd);
+    \end{tikzpicture}
+    \end{center}
+  \end{block}
+\end{column}
+
+\end{columns}
+
+\vspace{0.3cm}
+\centering
+\small\textbf{Respuesta 202 →} \texttt{\{requestId, accepted, rejected, documents[\,]\}}
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────────
+% SLIDE: FLUJO POST-PROCESAMIENTO
+% ─────────────────────────────────────────────────────────────────
+\begin{frame}{Flujo de procesamiento · Salidas operativas}
+\begin{center}
+\begin{tikzpicture}[node distance=0.6cm and 2cm]
+
+  \node[boxN] (fs)  {Documento procesado en Firestore};
+  \node[boxN, below=of fs] (dash) {Dashboard web (Cloud Run)};
+
+  \node[boxG, below left=0.8cm and 1.8cm of dash, align=center, text width=3.2cm]  (tab) {Pestañas por tipo\\ Factura · Comprobante · Nota};
+  \node[boxG, below=0.8cm of dash, align=center, text width=2.6cm]                 (det) {Vista de detalle\\ + PDF original};
+  \node[boxG, below right=0.8cm and 1.8cm of dash, align=center, text width=3.4cm] (zip) {POST /api/exports/:concepto\\ $\rightarrow$ ZIP en Cloud Storage};
+
+  \draw[arrowB] (fs)   -- (dash);
+  \draw[arrowB] (dash) -- (tab);
+  \draw[arrowB] (dash) -- (det);
+  \draw[arrowB] (dash) -- (zip);
+
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.3cm}
+\begin{columns}
+  \begin{column}{0.45\textwidth}
+    \begin{exampleblock}{Estados de documento}
+      \texttt{pendiente} → \texttt{procesado} → \texttt{error}
+    \end{exampleblock}
+  \end{column}
+  \begin{column}{0.45\textwidth}
+    \begin{exampleblock}{Dedupe automático}
+      Hash SHA-256 del contenido del archivo evita duplicados en cada corrida
+    \end{exampleblock}
+  \end{column}
+\end{columns}
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────────
+% SLIDE: RECURSOS GCP
+% ─────────────────────────────────────────────────────────────────
+\begin{frame}{Recursos GCP utilizados}
+\begin{columns}[T]
+\begin{column}{0.55\textwidth}
+  \rowcolors{2}{gcpBg}{white}
+  \arrayrulecolor{black}
+  \begin{tabular}{@{}p{3.2cm}p{5cm}@{}}
+    \toprule
+    \textbf{Servicio} & \textbf{Rol en el sistema} \\
+    \midrule
+    \textbf{Cloud Run} & Servidor principal. Corre la API Node.js y el dashboard web. Escala a 0 cuando no hay tráfico. \\
+    \textbf{Cloud Build} & Compila y empaqueta la imagen Docker en cada deploy. \\
+    \textbf{Container Registry} & Almacena la imagen Docker del servicio. \\
+    \textbf{Cloud Storage} & Guarda PDFs/XMLs originales (bucket raw) y ZIPs exportados (bucket exports). \\
+    \textbf{Firestore} & Base de datos de documentos procesados. Alimenta el dashboard en tiempo real. \\
+    \textbf{Document AI} & Extrae campos estructurados de PDFs de facturas (número, fecha, monto, emisor). \\
+    \textbf{IAM} & Service account con roles mínimos para Storage, Firestore y Document AI. \\
+    \bottomrule
+  \end{tabular}
+\end{column}
+\begin{column}{0.4\textwidth}
+  \begin{alertblock}{Arquitectura serverless}
+    Cloud Run escala a cero instancias cuando no hay tráfico. Solo se cobra por requests procesados.
+  \end{alertblock}
+
+  \vspace{0.4cm}
+
+  \begin{block}{Buckets configurados}
+    \footnotesize
+    \texttt{invoice-automation-497420-raw}\\
+    \quad → PDFs/XMLs originales\\[4pt]
+    \texttt{invoice-automation-497420-exports}\\
+    \quad → ZIPs por concepto
+  \end{block}
+
+  \vspace{0.4cm}
+
+  \begin{block}{Document AI · Processor}
+    \footnotesize
+    Tipo: \texttt{INVOICE\_PROCESSOR}\\
+    Ubicación: \texttt{us}\\
+    ID: \texttt{5624412ac0f58ebf}
+  \end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────────
+% SLIDE: ROL DE WORKATO
+% ─────────────────────────────────────────────────────────────────
+\begin{frame}{Rol de Workato en el flujo}
+\begin{columns}[T]
+\begin{column}{0.5\textwidth}
+  \textbf{Lo que hace Workato:}
+  \vspace{0.2cm}
+  \begin{itemize}
+    \item[\faEnvelope] Monitorea el buzón de correo (Outlook / Gmail) en forma continua.
+    \item[\faPaperclip] Detecta correos con adjuntos PDF o XML.
+    \item[\faFilter] Filtra por remitente, tamaño, extensión y lista de permitidos.
+    \item[\faDownload] Descarga el adjunto en binario (bytes).
+    \item[\faPaperPlane] Envía \texttt{multipart/form-data} al endpoint\\
+      \texttt{POST /api/intake} de Cloud Run con:
+      \begin{itemize}
+        \item[\scriptsize\faFile] Archivo(s) en campo \texttt{files}
+        \item[\scriptsize\faTag] Metadatos: \texttt{messageId}, \texttt{sender}, \texttt{subject}, \texttt{receivedAt}
+        \item[\scriptsize\faKey] Header \texttt{x-workato-secret}
+      \end{itemize}
+    \item[\faSync] Gestiona reintentos automáticos ante errores de red.
+    \item[\faBell] Envía alertas ante fallos reiterados.
+  \end{itemize}
+\end{column}
+\begin{column}{0.45\textwidth}
+  \textbf{Lo que Workato \underline{no} hace:}
+  \vspace{0.2cm}
+  \begin{itemize}
+    \item[\faTimes] Leer ni interpretar el contenido del PDF/XML.
+    \item[\faTimes] Clasificar tipo de documento.
+    \item[\faTimes] Extraer campos (número, monto, fecha).
+    \item[\faTimes] Guardar datos en base de datos.
+    \item[\faTimes] Generar ZIPs ni reportes.
+  \end{itemize}
+
+  \vspace{0.5cm}
+
+  \begin{exampleblock}{Contrato entre Workato y GCP}
+    \footnotesize
+    \textbf{Workato envía:} archivo + metadatos del correo\\[3pt]
+    \textbf{GCP responde:} \texttt{202 Accepted} con campos extraídos, tipo documental y concepto\\[3pt]
+    \textbf{Idempotencia:} el hash del archivo evita reprocesar duplicados aunque Workato reintente
+  \end{exampleblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────────
+% SLIDE: COSTOS ESTIMADOS GCP
+% ─────────────────────────────────────────────────────────────────
+\begin{frame}{Costos estimados GCP}
+\begin{columns}[T]
+\begin{column}{0.58\textwidth}
+  \rowcolors{2}{gcpBg}{white}
+  \arrayrulecolor{black}
+  \begin{tabular}{@{}p{2.8cm}p{2.2cm}p{3cm}@{}}
+    \toprule
+    \textbf{Servicio} & \textbf{USD/mes} & \textbf{Base del cálculo} \\
+    \midrule
+    Cloud Run       & \$0 -- \$15  & \textasciitilde500 req/día · 512 MB RAM \\
+    Cloud Build     & \$0 -- \$5   & 120 min/día gratis · builds ocasionales \\
+    Container Registry & \$1 -- \$3 & imagen \textasciitilde200 MB \\
+    Cloud Storage   & \$2 -- \$10  & 5--50 GB PDFs/XMLs/ZIPs \\
+    Firestore       & \$1 -- \$15  & 10k escrituras + 50k lecturas/día \\
+    Document AI     & \$15 -- \$60 & 500--2000 páginas/mes · \$0.03/pág \\
+    \midrule
+    \textbf{Total estimado} & \textbf{\$20 -- \$108} & Operación normal \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.3cm}
+  \footnotesize
+  \textit{Precios referenciales · región us-central1 · mayo 2026.}\\
+  \textit{Document AI: primeras 1000 pág/mes son gratis (Free Tier).}
+\end{column}
+
+\begin{column}{0.38\textwidth}
+  \begin{alertblock}{\faExclamationTriangle\ \ Variable clave}
+    El costo de \textbf{Document AI} domina el total y depende directamente del volumen de páginas procesadas por mes.
+  \end{alertblock}
+
+  \vspace{0.4cm}
+
+  \begin{block}{Escenarios}
+    \footnotesize
+    \begin{tabular}{ll}
+      \textbf{Bajo}  & \textless 500 pág/mes \\
+                     & \textasciitilde \$20/mes \\[4pt]
+      \textbf{Medio} & 500--2000 pág/mes \\
+                     & \textasciitilde \$50/mes \\[4pt]
+      \textbf{Alto}  & \textgreater 2000 pág/mes \\
+                     & \textasciitilde \$100+/mes \\
+    \end{tabular}
+  \end{block}
+
+  \vspace{0.3cm}
+
+  \begin{exampleblock}{Free Tier aplicable}
+    \footnotesize
+    Cloud Run: 2M req/mes gratis\\
+    Firestore: 1 GB almacenamiento\\
+    Document AI: 1000 pág/mes
+  \end{exampleblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ─────────────────────────────────────────────────────────────────
+% SLIDE: RESUMEN
+% ─────────────────────────────────────────────────────────────────
+\begin{frame}{Resumen de la solución}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+  \begin{block}{Capa de captura · Workato}
+    \begin{itemize}
+      \item Monitor de correo Outlook/Gmail
+      \item Filtrado y descarga de adjuntos PDF/XML
+      \item Envío a Cloud Run con metadatos
+      \item Reintentos y alertas operativas
+    \end{itemize}
+  \end{block}
+
+  \vspace{0.3cm}
+
+  \begin{block}{Capa de procesamiento · GCP}
+    \begin{itemize}
+      \item Cloud Run: API + Dashboard web
+      \item Document AI: extracción de campos
+      \item Firestore: persistencia y consultas
+      \item Cloud Storage: archivos y exports
+    \end{itemize}
+  \end{block}
+\end{column}
+
+\begin{column}{0.48\textwidth}
+  \begin{exampleblock}{Capacidades habilitadas}
+    \begin{itemize}
+      \item[\faCheckCircle] Clasificación automática de documentos
+      \item[\faCheckCircle] Extracción de campos clave (número, fecha, monto, emisor)
+      \item[\faCheckCircle] Dashboard por pestañas (Facturas · Comprobantes · Notas)
+      \item[\faCheckCircle] Exportación ZIP por concepto
+      \item[\faCheckCircle] Dedupe por hash de contenido
+      \item[\faCheckCircle] Trazabilidad de estado por documento
+      \item[\faCheckCircle] Soporte PDF y XML en el mismo flujo
+    \end{itemize}
+  \end{exampleblock}
+
+  \vspace{0.3cm}
+
+  \begin{alertblock}{Entorno de prueba disponible}
+    \tiny\ttfamily https://proyecto2-facturas-\\lanrfivtaq-uc.a.run.app
+  \end{alertblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+\end{document}
