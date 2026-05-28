@@ -49,6 +49,11 @@ async function extractFromXml(buffer: Buffer): Promise<ExtractedFields> {
   const xml = buffer.toString("utf-8").replace(/^\uFEFF/, "");
   const parsed = await parseStringPromise(xml, { explicitArray: false, mergeAttrs: true, trim: true });
 
+  // CDR (SUNAT ApplicationResponse) — confirmación de recepción, sin datos financieros
+  if (parsed["ar:ApplicationResponse"] != null) {
+    return { rawTextSnippet: xml.slice(0, 500) };
+  }
+
   // Navigate UBL structure directly for reliable extraction
   const invoice = (parsed["Invoice"] ?? parsed) as Record<string, unknown>;
   const supplierParty = getPath(invoice, ["cac:AccountingSupplierParty", "cac:Party"]);

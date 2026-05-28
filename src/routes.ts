@@ -69,15 +69,23 @@ router.post("/intake", upload.fields([{ name: "files" }, { name: "files[]" }]), 
     return res.status(400).json({ error: "No se recibieron archivos PDF o XML válidos." });
   }
 
-  // Extract structured data: prefer XML (reliable), fall back to PDF
-  let extracted = {};
+  // Extract structured data: procesar todos los XMLs y mergear (la factura UBL gana sobre el CDR)
+  let extracted: Record<string, unknown> = {};
   let extractionError: string | undefined;
   try {
-    const xmlFile = files.find(f => detectFileType(f.originalname, f.mimetype) === "xml");
+    const xmlFiles = files.filter(f => detectFileType(f.originalname, f.mimetype) === "xml");
     const pdfFile = files.find(f => detectFileType(f.originalname, f.mimetype) === "pdf");
-    const best = xmlFile ?? pdfFile;
-    if (best) {
-      extracted = await extractFields(detectFileType(best.originalname, best.mimetype), best.buffer, best.mimetype);
+    if (xmlFiles.length > 0) {
+      for (const xmlFile of xmlFiles) {
+        const result = await extractFields("xml", xmlFile.buffer, xmlFile.mimetype);
+        for (const [k, v] of Object.entries(result)) {
+          if (v !== undefined && v !== null && v !== "") {
+            extracted[k] = v;
+          }
+        }
+      }
+    } else if (pdfFile) {
+      extracted = await extractFields("pdf", pdfFile.buffer, pdfFile.mimetype) as Record<string, unknown>;
     }
   } catch (err) {
     extractionError = err instanceof Error ? err.message : "Error de extracción";
