@@ -1,313 +1,344 @@
-# Sistema de Clasificacion
+# Sistema Automatizado de Revisión y Clasificación de Facturas
 
 **Cliente:** Alupar | La Virgen  
-**Fecha:** 10 de abril de 2026  
+**Fecha:** 8 de abril de 2026  
 **Tipo de entrega:** Monto cerrado por entregable  
-**Inversion estimada (base):** USD 1,500 (50 USD/hora x 30 horas)  
-**Plazo de ejecucion:** 4 semanas
-
----
+**Inversión estimada:** USD 1,500 (50 USD/hora × 30 horas)  
+**Plazo de ejecución:** 4 semanas calendario  
 
 ## 1. Resumen ejecutivo
 
-Este documento presenta la propuesta tecnica para automatizar la identificacion y lectura de documentos recibidos por correo (facturas, comprobantes y notas), con el fin de acelerar la preparacion de informes por concepto para el area de contabilidad.
+Este documento presenta la propuesta técnica para desarrollar un sistema automatizado de revisión y clasificación de facturas que opera en tiempo real sobre el correo corporativo de Outlook. La solución fue diseñada en respuesta a un proceso manual que consume tiempo significativo y está expuesto a errores humanos en la identificación de remitentes y en el direccionamiento de documentos a los departamentos correspondientes.
 
-La solucion se apoya en **Workato** para orquestar la captura de correos y en una capa de procesamiento (dentro de Workato o en Google Cloud Platform, segun configuracion optima) para clasificar el tipo de documento, extraer datos clave y organizar la salida operativa.
+El propósito central de esta iniciativa es mejorar la eficiencia operativa del proceso de revisión y clasificación de documentos, aportando visibilidad centralizada y reduciendo las tareas repetitivas de búsqueda, identificación manual y consolidación de datos.
 
-El resultado esperado es un tablero con **una pestana por tipo de documento** (Facturas, Comprobantes, Notas), donde cada registro muestre informacion relevante como numero, fecha de emision, monto, fecha de vencimiento y concepto. Adicionalmente, el flujo armara paquetes `.zip` agrupando los documentos por concepto, listos para ser remitidos al area de contabilidad.
+La solución integra dos componentes tecnológicos principales: un servicio de escucha activa del correo que captura facturas de forma automática (Workato), y un panel de control web accesible donde se visualiza un resumen ejecutivo de todos los documentos pendientes con la información clave ya extraída y clasificada (Google Cloud Platform).
 
----
+El valor generado no es únicamente la velocidad del procesamiento, sino la reducción del error operativo y la visibilidad centralizada que permite una toma de decisiones más consiente y consistente.
 
-## 2. Flujo operativo actual y oportunidad de automatizacion
+## 2. Exploración del flujo y oportunidad de automatización
 
-### 2.1 Flujo actual
+### 2.1 Contexto operativo actual
 
-Hoy el equipo recibe correos con diferentes tipos de contenido:
+Alupar recibe diariamente un volumen variable de facturas y recibos a través del correo de Outlook corporativo, provenientes de empresas proveedoras, clientes y contratistas externos. Actualmente existe un flujo claro de revisión que contempla:
 
-- Correos con PDF adjunto (facturas, comprobantes, notas).
-- Correos sin PDF adjunto.
-- Correos con adjuntos que no corresponden a los conceptos objetivo.
+1. Revisar cada correo recibido en el buzón general.
+2. Identificar el remitente con base en:
+   - El dominio del correo del emisor (a veces indicativo, a veces genérico).
+   - La firma dentro del correo.
+   - El sello o membrete en el documento PDF o imagen adjunto.
+   - Datos dentro del documento mismo (número de identificación, membrete, etc.).
+3. Identificar si el documento corresponde a una factura o a un comprobante de pago.
+4. Registrar la fecha y otros detalles relevantes.
+5. Consultar sistemas internos (Excel, bases de datos locales) para encontrar el mapeo entre empresa y equipo responsable.
+6. Redireccionar el correo o crear un registro de derivación al equipo correspondiente.
 
-A partir de esos correos, el proceso operativo requiere:
+Este flujo ya cuenta con criterios operativos definidos y experiencia del equipo en la toma de decisiones. La propuesta busca potenciar ese trabajo mediante la automatización del flujo de identificación de facturas, para que la información llegue preclasificada y consolidada en un único panel. De esta forma, el tiempo del equipo se orienta más a validación, control y seguimiento, y menos a tareas de recopilación.
 
-1. Identificar de que tipo es cada correo/documento.
-2. Leer manualmente los archivos para extraer datos clave.
-3. Agrupar los documentos por concepto (ejemplo: facturas de peajes).
-4. Armar informes por concepto con campos como:
-   - Numero de documento.
-   - Fecha de emision.
-   - Monto.
-   - Fecha de vencimiento.
-   - Otros datos requeridos por el area.
-5. Comprimir en `.zip` los documentos agrupados por concepto para remitir al area de contabilidad.
+### 2.2 Casos de automatización prioritaria
 
-### 2.2 Oportunidad de automatizacion
+Dentro del flujo actual existen escenarios donde la automatización aporta mayor valor:
 
-La propuesta busca convertir este flujo en un proceso asistido y trazable, donde el trabajo del equipo se concentre en validacion y decision, no en lectura repetitiva.
+- Empresas con múltiples dominios de correo: un proveedor puede enviar desde direcciones diferentes; la automatización ayuda a unificar la identificación de la misma contrapartida.
+- Remitentes genéricos: correos desde dominio @gmail.com o direcciones corporativas no descriptivas; el sistema puede apoyarse en contenido y adjuntos para sugerir la empresa correcta.
+- Documentos sin estructura clara: algunos archivos llegan como imágenes o en formatos no estándar; la solución centraliza criterios para facilitar su revisión.
+- Derivaciones entre equipos: la clasificación asistida y trazable reduce reprocesos y mejora continuidad operativa.
 
-La automatizacion habilita:
+### 2.3 Oportunidad de mejora operativa
 
-- Deteccion automatica de correos con y sin adjuntos PDF.
-- Clasificacion de documentos por tipo: factura, comprobante o nota.
-- Extraccion automatica de datos clave desde PDF.
-- Identificacion del concepto de cada documento y agrupacion por concepto.
-- Visualizacion por pestanas segun tipo de documento.
-- Generacion de paquetes `.zip` por concepto para envio o archivo.
+El tiempo dedicado a este proceso representa una oportunidad concreta para elevar productividad y foco operativo. Con automatización, la persona responsable puede dedicar más energía a tareas de mayor valor: seguimiento de facturas pendientes, validación de montos, coordinación de pagos y resolución de discrepancias contables. Además, la estandarización del flujo permite:
 
----
+- Mayor continuidad del proceso, incluso en días de alto volumen de correos.
+- Mejor precisión de derivación, al contar con sugerencias de clasificación basadas en reglas.
+- Menor reproceso, gracias a un registro único y trazable por documento.
 
-## 3. Objetivo del proyecto
+La solución automatiza las etapas repetitivas de captura, identificación preliminar y consolidación de información, aportando una vista clara y estructurada para la toma de decisiones.
 
-Construir un flujo automatizado que:
+### 2.4 Objetivo del proyecto
 
-1. Monitoree correos entrantes y detecte adjuntos relevantes.
-2. Clasifique documentos en tres categorias: Facturas, Comprobantes y Notas.
-3. Extraiga informacion clave desde PDF para cada categoria.
-4. Identifique el concepto operativo de cada documento.
-5. Presente los datos en un dashboard con una pestana por tipo de documento.
-6. Agrupe y exporte los documentos por concepto en archivos `.zip` listos para redactar el informe para contabilidad.
+Construir un sistema que:
 
----
+1. Escuche activamente el correo de Outlook y capture automáticamente todo email con adjuntos que cumplan criterios de factura/recibo.
+2. Extraiga información clave de cada documento: remitente, fecha de envío, tipo (factura o comprobante), fecha de documento, monto (si está disponible).
+3. Relacione automáticamente el remitente con la empresa origen utilizando bases de referencias (dominios de correo, perfiles de empresa).
+4. Presente toda la información en un panel de control accesible donde la persona responsable vea un resumen organizado y clara de documentos pendientes.
+5. Facilite la derivación permitiendo cambios de clasificación rápidos y registro de decisiones.
 
-## 4. Solucion tecnica propuesta
+## 3. Solución técnica propuesta
 
-### 4.1 Vision general de la arquitectura
+### 3.1 Visión general de la arquitectura
 
-La solucion se construye sobre dos pilares tecnologicos principales que trabajan en secuencia:
+La solución se construye sobre dos pilares tecnológicos principales que trabajan de forma coordinada:
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                                                              │
-│  ┌──────────────────┐      ┌──────────────────────────────┐ │
-│  │ CAPA DE CAPTURA  │      │   CAPA DE PROCESAMIENTO      │ │
-│  │   (Workato)      │─────▶│   Y PRESENTACION (GCP)       │ │
-│  │                  │      │                              │ │
-│  │ • Monitor de     │      │ • Document AI (lectura PDF)  │ │
-│  │   correos        │      │ • Cloud Functions            │ │
-│  │ • Filtros de     │      │   (clasificacion y concepto) │ │
-│  │   adjuntos       │      │ • Firestore (base de datos)  │ │
-│  │ • Descarga y     │      │ • Cloud Storage (PDFs)       │ │
-│  │   envio a GCP    │      │ • Dashboard web              │ │
-│  └──────────────────┘      └──────────────────────────────┘ │
-│         │                               │                    │
-│   Correo (Outlook)                Panel web por pestana      │
-│   (fuente de datos)         (usuario que genera el informe)  │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
+- **Capa de escucha (Workato)**
+  - Monitor de correos
+  - Filtros inteligentes
+  - Extracción de datos
 
-**Workato** actua como punto de entrada: monitorea el correo, detecta mensajes con adjuntos PDF relevantes, los descarga y los envia a Google Cloud para procesamiento. No lee ni interpreta el contenido del PDF; su rol es la orquestacion.
+- **Capa de datos y clasificación (Google Cloud)**
+  - Base de datos
+  - Reglas de clasificación
+  - Mapeo de empresas
 
-**Google Cloud Platform** concentra toda la inteligencia del sistema: lee el contenido del PDF mediante Document AI, clasifica el tipo de documento, extrae los campos clave, identifica el concepto y almacena el resultado estructurado. Tambien expone el dashboard web donde contabilidad visualiza y opera sobre los datos.
+**Fuente de datos:** Correo Outlook  
+**Interfaz de usuario:** Panel de Control Web
 
-### 4.2 Stack tecnologico
+Workato actúa como centinela permanente: monitorea el correo de Outlook en tiempo real, aplica filtros heurísticos para identificar documentos relevantes, extrae datos base de cada correo y lo envía hacia Google Cloud para su procesamiento posterior.
 
-#### Workato — Orquestacion de correos y captura de adjuntos
+Google Cloud Platform proporciona la capa de persistencia, análisis y presentación: almacena un registro de cada documento capturado, aplica reglas de clasificación más sofisticadas, mantiene la base de referencias de empresas, y expone un panel web donde el equipo accede a toda la información compilada.
 
-**Workato** es una plataforma de automatizacion de procesos empresariales especializada en la integracion entre herramientas de negocio como Outlook, Gmail, Google Cloud y bases de datos. En esta solucion su rol se limita a la capa de captura, que es donde realmente aporta valor:
+### 3.2 Stack tecnológico
 
-1. **Escucha activa del correo**: monitorea el buzon configurado de forma continua. Cuando llega un nuevo email, Workato lo evalua de inmediato.
+#### Workato — Orquestación de procesos y escucha del correo
 
-2. **Filtrado inicial**: determina si el correo tiene adjuntos en formato PDF. Los correos sin adjunto PDF se registran aparte (para visibilidad) pero no ingresan al flujo de procesamiento de documentos.
+Workato es una plataforma de automatización de procesos empresariales que se especializa en la integración entre sistemas como Microsoft Outlook, Google Cloud, bases de datos y aplicaciones de negocio. Su rol en esta solución es triple:
 
-3. **Descarga y envio a GCP**: descarga el archivo adjunto y lo envia a Google Cloud Storage junto con los metadatos del correo (remitente, fecha de recepcion, asunto). A partir de ese punto, GCP toma el control.
+1. **Escucha activa:** monitorea la bandeja de correos de Outlook de forma continua (cada 5 minutos o según se configure). Cuando llega un nuevo email, Workato lo evalúa inmediatamente.
+2. **Filtrado inteligente inicial:** aplica reglas básicas para determinar si el correo contiene facturas:
+   - Presencia de palabras clave en asunto ("factura", "recibo", "invoice", "comprobante", etc.).
+   - Presencia de adjuntos en formatos de documento (PDF, Excel, imágenes).
+   - Exclusión de ciertos dominios conocidos como internos (correos de la misma empresa).
+3. **Extracción de datos preliminares:** obtiene de forma directa datos que están disponibles sin procesar el documento:
+   - Remitente (dirección de correo origen).
+   - Fecha de recepción.
+   - Asunto del correo.
+   - Nombres de archivos adjuntos.
+   - Cuerpo del correo (si contiene números de factura u otros datos identificatorios).
 
-Workato fue elegido para esta capa porque cuenta con conectores nativos a los principales clientes de correo (Outlook, Gmail) y a Google Cloud, requiere configuracion visual sin codigo, y permite ajustar reglas de filtrado sin reprogramacion.
+Workato fue elegido porque cuenta con conectores nativos a Outlook y Google Cloud, requiere configuración mínima de código personalizado, y su interfaz de flujos visuales permite que cambios en las reglas se implementen sin requerir reprogramación.
 
-> **Por que Workato no lee los PDF:** Workato es una plataforma de integracion y orquestacion, no un motor de procesamiento de documentos. No tiene capacidades nativas para extraer texto estructurado de un PDF ni para distinguir si un documento es una factura, un comprobante o una nota. Intentar hacer eso dentro de Workato implicaria llamadas externas complejas y resultados poco confiables. Para esa tarea existe Document AI, que es el servicio de Google disenado especificamente para eso.
+#### Google Cloud Platform — Persistencia, análisis y presentación
 
-#### Google Cloud Document AI — Lectura e interpretacion de documentos PDF
+Google Cloud Platform proporciona la infraestructura en la nube donde se centraliza la inteligencia del sistema:
 
-**Document AI** es el servicio de Google Cloud disenado especificamente para leer, estructurar y extraer informacion de documentos como facturas, recibos y comprobantes. Es el componente central de la inteligencia de esta solucion.
+- **Google BigTable / Firestore (base de datos NoSQL):**
+  - Almacena un registro inmutable de cada correo procesado: quién envía, cuándo, qué adjuntos contiene, qué datos se extrajeron.
+  - Mantiene la tabla de referencias de empresas: dominios de correo asociados, departamentos responsables.
+  - Registra decisiones y cambios de estado (cuando un documento se clasificó, quién lo hizo, a qué equipo se derivó).
 
-Cuando recibe un PDF, Document AI:
+- **Cloud Functions / App Engine (lógica de procesamiento):**
+  - Implementa reglas de clasificación más complejas que las que Workato puede resolver por sí solo.
+  - Busca en la tabla de referencias para identificar la empresa remitente a partir del dominio u otros datos del correo.
+  - Asigna departamento responsable basándose en el tipo de documento (factura o comprobante) y empresa origen.
+  - Genera sugerencias de derivación que se presentan en el panel web.
 
-1. Extrae todo el texto del documento, incluso en documentos con formatos variables o multiples columnas.
-2. Identifica bloques semanticos: encabezados, tablas, pies de pagina, sellos, montos, fechas.
-3. Aplica modelos preentrenados (o un modelo ajustado al tipo de documentos del cliente) para extraer campos clave con alta precision:
-   - Numero de documento.
-   - Fecha de emision.
-   - Fecha de vencimiento.
-   - Monto total.
-   - Emisor del documento.
-4. Retorna una respuesta estructurada en JSON que Cloud Functions consume para completar la clasificacion.
+- **Cloud Storage / Google Sheets API:**
+  - Almacena los documentos adjuntos (PDF, imágenes) en almacenamiento en la nube para acceso futuro sin depender de que el correo original esté disponible.
+  - Integración con Google Sheets para exportar datos en tiempo real hacia un Excel central (opcional), que puede servir como respaldo o para análisis posterior.
 
-La eleccion de Document AI sobre alternativas mas simples (como librerias de extraccion de texto genericas) se justifica en que los documentos financieros tienen variabilidad alta: distintos formatos, posiciones de campos, idiomas y calidades de escaneo. Document AI esta entrenado para ese contexto especifico y reduce significativamente la tasa de errores en la extraccion.
+- **Cloud Run / Looker Studio (panel web de usuario final):**
+  - Un panel web accesible desde navegador que muestra el resumen de facturas: tabla con empresa, remitente, fecha, tipo, estado, monto (si está extraído).
+  - Funcionalidades: ordenar por columnas, filtrar por empresa/departamento/fecha, ver detalles de cada documento, cambiar clasificación manual si es necesario, marcar como "derivado", agregar notas.
+  - El panel se actualiza en tiempo real conforme llegan nuevos correos a Workato.
 
-#### Google Cloud Functions — Clasificacion por tipo e identificacion de concepto
+#### Integración y flujo de datos
 
-Luego de que Document AI extrae los campos del PDF, una **Cloud Function** recibe esa informacion estructurada y aplica la logica de negocio:
+El flujo completo funciona así:
 
-1. **Clasificacion por tipo de documento**: en base al contenido extraido (palabras clave, estructura, campos presentes), determine si el documento es una Factura, un Comprobante o una Nota.
+1. Un correo con factura llega a Outlook.
+2. Workato lo detecta en los próximos 5 minutos.
+3. Extrae datos preliminares (remitente, fecha, nombres de archivos).
+4. Envía la información a Google Cloud Functions.
+5. Cloud Functions busca en la tabla de referencias para identificar empresa y departamento.
+6. Almacena el registro en Firestore/BigTable.
+7. Descarga el adjunto y lo guarda en Cloud Storage.
+8. El panel web refleja la nueva factura con toda la información compilada.
+9. El usuario responsable ve el resumen, valida la clasificación (o la ajusta), y marca como "listo para derivar".
 
-2. **Identificacion del concepto**: lee campos como el emisor, la descripcion del servicio o el tipo declarado en el documento y lo mapea contra una tabla de conceptos configurada por el equipo (ejemplo: "peaje", "servicio electrico", "transporte", etc.).
+## 4. Beneficios de la solución
 
-3. **Registro del resultado**: almacena el documento procesado en Firestore con todos los campos extraidos y el resultado de clasificacion.
+### Beneficios operacionales
 
-4. **Generacion del ZIP**: agrupa los PDFs por concepto en Cloud Storage y genera el archivo `.zip` correspondiente para descarga y generar el informe dirigido a contabilidad.
+1. **Reducción de tiempo de procesamiento:** de un promedio de 3-5 minutos por factura (búsqueda, lectura, clasificación manual) a menos de 1 minuto (revisión y confirmación en el panel).
+2. **Precisión mejorada:** la clasificación automática elimina errores de transcripción manual. El usuario únicamente valida y corrige, lo que es más rápido y menos propenso a error que hacer la clasificación desde cero.
+3. **Visibilidad centralizada:** toda factura pendiente está en un único lugar, ordenada y clasificada. No hay riesgo de que se pierda un correo en la bandeja de entrada.
+4. **Trazabilidad completa:** se registra quién procesó cada factura, cuándo, y a qué departamento se derivó. Esto facilita auditoría y seguimiento de discrepancias.
+5. **Escalabilidad sin costo proporcional:** si el volumen de facturas aumenta, el sistema absorbe el crecimiento sin que requiera más horas de trabajo de la persona responsable. La infraestructura en la nube escala automáticamente.
 
-Las Cloud Functions son serverless: solo se ejecutan cuando hay un documento nuevo para procesar, no consumen recursos cuando no hay actividad, y escalan automaticamente si el volumen de correos aumenta.
 
-#### Google Cloud Firestore — Base de datos de documentos procesados
 
-**Firestore** almacena el registro estructurado de cada documento procesado:
-
-| Campo | Descripcion |
-|---|---|
-| `id` | Identificador unico del documento |
-| `fecha_recepcion` | Fecha y hora de llegada del correo |
-| `remitente` | Direccion de correo origen |
-| `tipo_documento` | Factura / Comprobante / Nota |
-| `numero_documento` | Numero extraido por Document AI |
-| `fecha_emision` | Fecha del documento |
-| `fecha_vencimiento` | Fecha de vencimiento (si aplica) |
-| `monto` | Monto total extraido |
-| `concepto` | Concepto identificado |
-| `archivo_pdf` | Referencia al PDF en Cloud Storage |
-| `archivo_zip` | Referencia al ZIP del concepto |
-| `estado` | Pendiente / Revisado / Procesado |
-
-Firestore es el origen de datos que alimenta el dashboard en tiempo real.
-
-#### Google Cloud Storage — Almacenamiento de PDFs y ZIPs
-
-**Cloud Storage** almacena los archivos originales recibidos y los paquetes de salida:
-
-- Carpeta `documentos/`: PDF originales organizados por fecha de recepcion.
-- Carpeta `exports/`: archivos `.zip` por concepto, listos para descarga.
-
-Esto garantiza que los documentos queden disponibles de forma permanente independientemente del correo original.
-
-#### Cloud Run / App Engine — Dashboard web
-
-El dashboard es una aplicacion web liviana desplegada en la nube sobre **Cloud Run**, que consulta Firestore y presenta la informacion operativa.
-
-Contenido del dashboard:
-
-- **Pestana Facturas**: tabla con todos los documentos clasificados como factura, filtrable por concepto, fecha y estado.
-- **Pestana Comprobantes**: tabla equivalente para comprobantes.
-- **Pestana Notas**: tabla equivalente para notas.
-- **Vista de detalle**: al hacer clic en un registro, muestra los campos extraidos y permite acceder al PDF original.
-- **Descarga de ZIP por concepto**: boton por concepto para descargar el paquete de documentos agrupados.
-- **Cambio de estado manual**: permite marcar documentos como revisados o procesados.
-
-El panel se actualiza en tiempo real: cada vez que Workato detecta un correo nuevo y GCP lo procesa, el registro aparece en la pestana correspondiente sin necesidad de recargar manualmente.
-
-### 4.3 Flujo completo de operacion
-
-```
-Llega un correo al buzon
-        │
-        ▼
-[Workato detecta el correo]
-        │
-        ├── ¿Tiene adjunto PDF? ──► NO ──► Registra correo sin adjunto y termina
-        │
-       SÍ
-        │
-        ▼
-[Workato descarga el PDF y lo sube a Cloud Storage]
-        │
-        ▼
-[Cloud Function se activa con el nuevo archivo]
-        │
-        ▼
-[Document AI lee el PDF y extrae campos estructurados]
-        │
-        ▼
-[Cloud Function clasifica: Factura / Comprobante / Nota]
-[Cloud Function identifica el concepto]
-        │
-        ▼
-[Se guarda el registro en Firestore]
-[Se agrega el PDF al ZIP del concepto en Cloud Storage]
-        │
-        ▼
-[Dashboard web refleja el nuevo documento en la pestana correspondiente]
-```
-
----
-
-## 5. Beneficios de la solucion
-
-1. **Mayor velocidad operativa:** reduce tiempos de lectura y clasificacion manual de correos/documentos.
-2. **Mejor consistencia de criterios:** aplica reglas estandarizadas para tipo documental y concepto.
-3. **Salida lista para gestion:** facilita informes por concepto y armado de paquetes `.zip`.
-4. **Trazabilidad del proceso:** centraliza en un dashboard los documentos procesados y su estado.
-
----
-
-## 6. Alcance del proyecto base (30 horas)
+## 5. Alcance del proyecto
 
 ### Incluye
 
-1. Configuracion de flujo Workato para captura de correos entrantes.
-2. Deteccion de correos con adjunto PDF y correos sin adjunto.
-3. Clasificacion inicial por tipo documental: Factura, Comprobante, Nota.
-4. Extraccion de campos clave de documentos PDF (segun estructura disponible).
-5. Regla de identificacion de concepto y agrupacion de documentos por concepto.
-6. Dashboard con 3 pestanas por tipo de documento.
-7. Generacion de `.zip` por concepto para documentos que cumplan criterio.
-8. Prueba funcional con muestra de correos/documentos provistos por el cliente.
+1. **Levantamiento funcional inicial:** reunión con el equipo para detallar el flujo actual, listar empresas proveedoras, documentar reglas de clasificación y departamentos responsables.
+2. **Configuración de Workato:**
+   - Conexión segura con Outlook corporativo.
+   - Definición de filtros para captura de facturas (palabras clave, tipos de adjuntos).
+   - Extracción automática de datos preliminares (remitente, asunto, fecha, nombres de archivos).
+   - Validación de filtros con ejemplos reales del correo histórico.
+3. **Implementación en Google Cloud Platform:**
+   - Base de datos para almacenar registro de facturas y referencias de empresas.
+   - Lógica de clasificación automática (búsqueda de empresa por dominio, análisis de contenido).
+   - Almacenamiento seguro de documentos adjuntos.
+   - Integración con Workato para recibir y procesar datos en tiempo real.
+4. **Desarrollo del panel web de usuario:**
+   - Tabla de facturas con información compilada: empresa, remitente, fecha, tipo, monto, estado.
+   - Funcionalidades: filtros por empresa/departamento/fecha, búsqueda, ordenamiento.
+   - Capacidad de editar clasificación manualmente y registrar cambios.
+   - Botón para marcar como "derivado" y registrar hacia qué equipo.
+   - Vista de detalles para ver correo original, adjuntos, datos extraídos.
+5. **Base de referencias inicial:**
+   - Mapeo de dominios de correo a empresas.
+   - Asignación de departamentos responsables por tipo de documento (factura o comprobante) y empresa.
+6. **Pruebas funcionales:**
+   - Captura de correos históricos (simulación de escucha sobre correos pasados).
+   - Validación de clasificaciones automáticas.
+   - Pruebas de usabilidad del panel con el equipo.
+   - Ajustes de reglas y referencias.
+7. **Documentación y capacitación:**
+   - Guía de uso del panel web.
+   - Procedimiento para actualizar referencias de empresas (agregar nuevos proveedores, cambiar departamentos).
+   - Manual de solución de problemas.
+   - Sesión de capacitación inicial (1-2 horas) con el equipo responsable.
+8. **Período de soporte inicial:** 5 días calendario posteriores a la entrega para ajustes, respuesta a preguntas y resolución de incidencias.
 
-### No incluye en esta propuesta base
+### No incluye en esta propuesta
 
-1. Entrenamiento avanzado de modelos de IA para documentos no estructurados complejos.
-2. Integraciones con ERP/contabilidad.
-3. Flujos multi-aprobacion con firmas o circuitos jerarquicos.
-4. Soporte de larga duracion post entrega (solo soporte inicial definido en condiciones).
+1. Integración con sistemas de contabilidad o ERP (SAP, NetSuite, Xero, etc.). Si se requiere en fases posteriores, se cotizará por separado.
+2. Extracción automatizada de datos de imágenes escaneadas usando reconocimiento óptico de caracteres (OCR). La solución trabaja con metadatos del correo y documents en formato digital estándar.
+3. Modificación de la infraestructura de Outlook (creación de buzones compartidos, reglas de filtro a nivel de servidor, etc.). Se asume acceso a Outlook convencional del usuario final.
+4. Procesamiento de facturas en idiomas distintos al español. Las reglas se acotarán a documentos en español e inglés.
+5. Interfaz móvil. El panel web es responsivo y funciona en celulares, pero no se desarrollará una aplicación mobile nativa dedicada.
+6. Integración con WhatsApp, Telegram o canales de comunicación distintos a correo. La solución se limita a monitoreo de Outlook.
 
----
+## 6. Metodología de trabajo
 
-## 7. Alcance adicional opcional (extra)
+El proyecto se desarrolla en 6 etapas iterativas con puntos de validación que aseguran que la solución refleje fielmente lo que el equipo requiere.
 
-### Boton de generacion de informe con LLM
+### Etapa 1 — Levantamiento detallado y mapeo de referencias
 
-Como alcance adicional, se puede incorporar una funcionalidad con boton en el dashboard para generar automaticamente el informe que sera enviado por correo.
+Se realizan sesiones con el equipo para comprender en detalle:
 
-Al presionar el boton:
+- Quiénes son los principales proveedores y clientes que envían facturas.
+- Cómo se identifican (dominios de correo, datos disponibles en el correo y documentos adjuntos).
+- Qué departamentos son responsables de cada tipo de documento.
+- Qué datos son considerados "críticos" para tomar una decisión (empresa, monto, fecha, tipo).
+- Casos especiales o excepciones al flujo general.
 
-1. Se toma el conjunto filtrado por concepto.
-2. Se invoca una LLM con plantilla de redaccion controlada.
-3. Se genera un borrador del informe con:
-   - Resumen ejecutivo del lote.
-   - Lista de documentos y campos clave.
-   - Observaciones detectadas (si aplica).
-4. Se deja listo para revision humana y envio.
+Se genera una tabla de referencias inicial con dominios de empresas, códigos, y asignaciones de departamento que será la base de la clasificación automática.
 
-**Esfuerzo adicional:** 8 horas  
-**Costo adicional:** USD 400 (50 USD/hora x 8 horas)
+**Resultado esperado:** documento con flujo actual validado, tabla de referencias inicial, lista de casos especiales.
 
----
+### Etapa 2 — Configuración de Workato y validación de captura
 
-## 8. Distribucion horaria
+Se configura Workato para monitorear Outlook y se define el conjunto de filtros que determinan si un correo contiene factura. Se hacen pruebas con correos históricos para validated que se capturen todos los documentos relevantes sin un exceso de falsos positivos.
 
-### Proyecto base
+Se documenta la taxonomía de datos que Workato extrae en cada correo (remitente, asunto, fecha, adjuntos) para confirmar que toda la información necesaria está disponible.
 
-| Actividad | Horas estimadas |
-|---|---:|
-| Levantamiento tecnico y mapeo de conceptos | 3.0 h |
-| Configuracion Workato (captura, filtros, enrutamiento) | 4.0 h |
-| Lectura y clasificacion de PDFs (Workato + GCP) | 8.0 h |
-| Reglas de identificacion de concepto + agrupacion | 4.0 h |
-| Dashboard (3 pestanas) + salida consolidada por concepto | 7.0 h |
-| Generacion automatica de ZIP por concepto | 2.0 h |
-| Pruebas funcionales + ajustes | 1.5 h |
-| Documentacion y entrega | 0.5 h |
-| **Total base** | **30.0 h** |
+**Resultado esperado:** Workato configurado y validado capturando facturas de Outlook con precisión.
 
-### Adicional opcional
+### Etapa 3 — Implementación de base de datos y lógica de clasificación
 
-| Actividad extra | Horas estimadas |
-|---|---:|
-| Boton y flujo LLM para generacion de informe | 8.0 h |
-| **Total adicional** | **8.0 h** |
+Se crea la base de datos en Google Cloud donde se almacenarán registros de facturas y referencias de empresas. Se implementa la lógica de clasificación: búsqueda de empresa por dominio de correo y datos disponibles del correo, asignación automática de departamento.
 
----
+Se prueban las reglas con ejemplos reales del correo histórico para validar que la clasificación es correcta en la gran mayoría de casos. Los casos ambiguos se marcan para revisión manual.
 
-## 9. Condiciones de entrega
+**Resultado esperado:** base de datos funcional con reglas de clasificación probadas contra datos históricos reales.
 
-- **Inversion base:** USD 1,500 — pago en dos hitos: 50% al inicio del proyecto, 50% a la entrega validada.
-- **Adicional opcional LLM:** USD 400 si se aprueba y ejecuta el alcance de generacion de informe.
-- **Soporte inicial:** 3 dias calendario posteriores a la entrega para ajustes menores y consultas.
-- **Cambios fuera de alcance:** se evaluan y cotizan por separado.
+### Etapa 4 — Desarrollo del panel web
+
+Se crea una interfaz web donde el usuario accede a la tabla de facturas capturadas. Se implementan funcionalidades de filtrado, búsqueda, vista de detalles y edición de clasificación. Se asegura que la interfaz sea clara e intuitiva para usuarios no técnicos.
+
+Se realiza pruebas de rendimiento para verificar que el panel carga rápidamente incluso con cientos de facturas históricas.
+
+**Resultado esperado:** panel web funcional, intuitivo y validado con el equipo usuario final.
+
+### Etapa 5 — Integración de extremo a extremo
+
+Se conectan todos los componentes: Workato envía datos a Google Cloud, Google Cloud llena la base de datos y procesa clasificaciones, el panel web consume esos datos en tiempo real. Se realizan pruebas de flujo completo con correos nuevos capturados en vivo.
+
+Se valida que los cambios que el usuario hacer en el panel (reclasificaciones, marcas de derivación) se registren en la base de datos de forma permanente.
+
+**Resultado esperado:** flujo completo de extremo a extremo validado con datos y decisiones reales.
+
+### Etapa 6 — Pruebas finales, capacitación y entrega
+
+Se realizan pruebas con volumen real de correos, se ajustan reglas según hallazgos, se documenta el sistema y se realiza sesión de capacitación con el equipo. Se entrega acceso a los sistemas con credenciales seguras.
+
+Se da soporte inicial durante 5 días calendario para responder preguntas, resolver incidencias menores y hacer ajustes de configuración.
+
+**Resultado esperado:** sistema operativo, equipo capacitado, soporte inicial cubierto.
+
+## 7. Estimación de esfuerzo y cronograma
+
+| Etapa | Descripción | Horas | Semana |
+|---|---|---:|---|
+| 1 | Levantamiento y mapeo de referencias | 4 | Semana 1 |
+| 2 | Configuración de Workato | 5 | Semana 1-2 |
+| 3 | Base de datos y lógica de clasificación | 8 | Semana 2-3 |
+| 4 | Desarrollo del panel web | 7 | Semana 2-3 |
+| 5 | Integración de extremo a extremo | 4 | Semana 3 |
+| 6 | Pruebas finales y capacitación | 2 | Semana 4 |
+| **Total** |  | **30 horas** | **4 semanas** |
+
+**Costo total:** 30 horas × USD 50/hora = **USD 1,500**
+
+## 8. Inversión y términos
+
+### Costo
+
+- **Tarifa:** USD 50 por hora
+- **Horas estimadas:** 30 horas
+- **Inversión total:** USD 1,500
+
+### Infraestructura en la nube (Google Cloud)
+
+La infraestructura en Google Cloud requerida para operar el sistema (base de datos, almacenamiento, funciones) tiene un costo típico de **USD 50-100 por mes** en nivel de producción inicial, dependiendo del volumen de facturas.
+
+Se propone completar el desarrollo, pruebas y entrega en esta propuesta. Los costos operativos mensuales de infraestructura serán responsabilidad del cliente (facturable directamente por Google Cloud), pero el monto es accesible incluso para pequeños volúmenes de procesamiento.
+
+### Términos de pago
+
+Se propone un esquema de pagos por hito:
+
+- 30% a la firma de este documento (inicio de Etapa 1).
+- 40% al término de Etapa 3 (base de datos y lógica funcional).
+- 30% restante a la entrega final (Etapa 6).
+
+### Alcance de cambios
+
+El presente presupuesto cubre el alcance definido en la Sección 5. Cambios de alcance, adiciones de funcionalidades o integraciones adicionales se documentarán y cotizarán por separado.
+
+## 9. Riesgos y mitigación
+
+### Riesgo 1: Volumen inesperado de correos con falsos positivos
+
+**Descripción:** Si los filtros de Workato son demasiado amplios, pueden capturar correos que no contienen facturas (por ejemplo, confirmaciones de recepción, correos de cotización, etc.), generando ruido en el panel.
+
+**Mitigación:** En la Etapa 2 se prueban los filtros contra histórico real de correos. Se ajusta la sensibilidad basándose en esos resultados. Se incluye opción de "marcar como no factura" en el panel para entrenar el sistema.
+
+### Riesgo 2: Empresas no identificadas por dominio
+
+**Descripción:** Si un proveedor usa múltiples dominios de correo o un dominio genérico, el sistema podría fallar al identificar automáticamente a la empresa origen.
+
+**Mitigación:** La arquitectura está diseñada para tolerar clasificaciones incompletas. Los casos donde no se identifica la empresa automáticamente se marcan como "requiere revisión manual" en el panel. El usuario puede ajustar la clasificación en segundos. Además, se documenta un procedimiento para agregar nuevos dominios a la base de referencias.
+
+### Riesgo 3: Cambios en el formato de Outlook o API
+
+**Descripción:** Microsoft podría cambiar la estructura de Outlook o limitar el acceso vía APIs en una actualización.
+
+**Mitigación:** Workato mantiene sus conectores actualizados como parte de su servicio. Cualquier cambio de Microsoft se comunica de antemano y Workato se adapta. Esta es una ventaja de usar un intermediario especializado en lugar de integración directa.
+
+### Riesgo 4: Documentos con estructura muy variable
+
+**Descripción:** Si las facturas no siguen formatos estandarizados (tamaños diferentes, posición de datos variable, información en distintas páginas), la extracción automática de datos podría ser inconsistente.
+
+**Mitigación:** La solución se enfoca en datos disponibles en metadatos del correo (remitente, fecha, asunto) y no depende de análisis profundo del contenido del documento. Los datos dentro de la factura que no se extraigan automáticamente se pueden agregar de forma manual en el panel si es crítico.
+
+## 10. Próximos pasos
+
+Si esta propuesta es de interés, se sugieren los siguientes pasos:
+
+1. Revisión y validación del documento con los stakeholders internos (jefe de operaciones, equipo de contabilidad, área de TI).
+2. Sesión de aclaración (1 hora aproximadamente) para responder preguntas técnicas y ajustar cualquier aspecto de la solución propuesta.
+3. Firma de acuerdo con términos de referencia y cronograma.
+4. Inicio de Etapa 1: levantamiento detallado y mapeo de referencias.
+
+## 11. Conclusión
+
+Esta propuesta plantea una solución pragmática que automatiza las partes repetitivas del proceso de revisión y clasificación de documentos. El sistema está diseñado para ser robusto frente a variabilidad en el formato de documentos, escalable conforme crezca el volumen de correos, y fácil de mantener y mejorar en etapas posteriores.
+
+La inversión estimada (USD 1,500) se justifica por la reducción de tiempo operativo diario, la mejora en precisión de clasificaciones y la creación de un registro trazable de todas las operaciones realizadas. El retorno de inversión se recupera típicamente en los primeros 2-3 meses de operación.
+
+Estamos disponibles para aclarar cualquier aspecto de esta propuesta y para iniciar el trabajo tan pronto el cliente lo apruebe.
