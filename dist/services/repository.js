@@ -22,20 +22,21 @@ class LocalJsonRepository {
     async readAll() {
         await this.ensureFile();
         const raw = await node_fs_1.promises.readFile(this.filePath, "utf-8");
-        return JSON.parse(raw);
+        const cleaned = raw.replace(/^\uFEFF/, "").trim();
+        return JSON.parse(cleaned || "[]");
     }
-    async writeAll(documents) {
+    async writeAll(records) {
         await this.ensureFile();
-        await node_fs_1.promises.writeFile(this.filePath, JSON.stringify(documents, null, 2), "utf-8");
+        await node_fs_1.promises.writeFile(this.filePath, JSON.stringify(records, null, 2), "utf-8");
     }
-    async save(document) {
+    async save(record) {
         const current = await this.readAll();
-        const index = current.findIndex((entry) => entry.id === document.id);
+        const index = current.findIndex((entry) => entry.id === record.id);
         if (index >= 0) {
-            current[index] = document;
+            current[index] = record;
         }
         else {
-            current.push(document);
+            current.push(record);
         }
         await this.writeAll(current);
     }
@@ -43,60 +44,54 @@ class LocalJsonRepository {
         const current = await this.readAll();
         return current.find((entry) => entry.id === id) ?? null;
     }
-    async findByHash(hash) {
+    async findByMessageId(messageId) {
         const current = await this.readAll();
-        return current.find((entry) => entry.hash === hash) ?? null;
+        return current.find((entry) => entry.metadata?.messageId === messageId) ?? null;
     }
     async list(filters) {
         const current = await this.readAll();
-        if (!filters) {
+        if (!filters)
             return current;
-        }
         return current.filter((entry) => {
-            if (filters.documentType && entry.documentType !== filters.documentType) {
+            if (filters.documentType && entry.documentType !== filters.documentType)
                 return false;
-            }
-            if (filters.concept && entry.concept !== filters.concept) {
+            if (filters.concept && entry.concept !== filters.concept)
                 return false;
-            }
-            if (filters.status && entry.status !== filters.status) {
+            if (filters.status && entry.status !== filters.status)
                 return false;
-            }
             return true;
         });
     }
 }
 class FirestoreRepository {
-    firestore = new firestore_1.Firestore();
+    firestore = new firestore_1.Firestore({ ignoreUndefinedProperties: true });
     collection = this.firestore.collection(config_1.config.firestoreCollection);
-    async save(document) {
-        await this.collection.doc(document.id).set(document, { merge: true });
+    async save(record) {
+        await this.collection.doc(record.id).set(record, { merge: true });
     }
     async findById(id) {
         const snap = await this.collection.doc(id).get();
-        if (!snap.exists) {
+        if (!snap.exists)
             return null;
-        }
         return snap.data();
     }
-    async findByHash(hash) {
-        const result = await this.collection.where("hash", "==", hash).limit(1).get();
-        if (result.empty) {
+    async findByMessageId(messageId) {
+        const result = await this.collection
+            .where("metadata.messageId", "==", messageId)
+            .limit(1)
+            .get();
+        if (result.empty)
             return null;
-        }
         return result.docs[0].data();
     }
     async list(filters) {
         let query = this.collection;
-        if (filters?.documentType) {
+        if (filters?.documentType)
             query = query.where("documentType", "==", filters.documentType);
-        }
-        if (filters?.concept) {
+        if (filters?.concept)
             query = query.where("concept", "==", filters.concept);
-        }
-        if (filters?.status) {
+        if (filters?.status)
             query = query.where("status", "==", filters.status);
-        }
         const result = await query.get();
         return result.docs.map((doc) => doc.data());
     }

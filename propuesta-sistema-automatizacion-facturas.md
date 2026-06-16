@@ -3,7 +3,7 @@
 **Cliente:** Alupar | La Virgen  
 **Fecha:** 8 de abril de 2026  
 **Tipo de entrega:** Monto cerrado por entregable  
-**Inversión estimada:** USD 1,500 (50 USD/hora × 30 horas)  
+**Inversión estimada:** USD 1,700 (50 USD/hora × 30 horas)  
 **Plazo de ejecución:** 4 semanas calendario  
 
 ## 1. Resumen ejecutivo
@@ -13,6 +13,8 @@ Este documento presenta la propuesta técnica para desarrollar un sistema automa
 El propósito central de esta iniciativa es mejorar la eficiencia operativa del proceso de revisión y clasificación de documentos, aportando visibilidad centralizada y reduciendo las tareas repetitivas de búsqueda, identificación manual y consolidación de datos.
 
 La solución integra dos componentes tecnológicos principales: un servicio de escucha activa del correo que captura facturas de forma automática (Workato), y un panel de control web accesible donde se visualiza un resumen ejecutivo de todos los documentos pendientes con la información clave ya extraída y clasificada (Google Cloud Platform).
+
+La extracción de datos se realiza de forma nativa sobre los archivos XML en formato UBL 2.1, que es el estándar oficial de los comprobantes electrónicos emitidos en el marco del sistema SUNAT de Perú. Esto elimina la necesidad de servicios de OCR o procesamiento de documentos de terceros para el caso de uso principal. Adicionalmente, el sistema valida cada comprobante en tiempo real contra el portal libre de SUNAT, confirmando su estado fiscal antes de presentarlo al usuario.
 
 El valor generado no es únicamente la velocidad del procesamiento, sino la reducción del error operativo y la visibilidad centralizada que permite una toma de decisiones más consiente y consistente.
 
@@ -118,9 +120,14 @@ Google Cloud Platform proporciona la infraestructura en la nube donde se central
 
 - **Cloud Functions / App Engine (lógica de procesamiento):**
   - Implementa reglas de clasificación más complejas que las que Workato puede resolver por sí solo.
-  - Busca en la tabla de referencias para identificar la empresa remitente a partir del dominio u otros datos del correo.
-  - Asigna departamento responsable basándose en el tipo de documento (factura o comprobante) y empresa origen.
+  - **Extracción nativa desde XML UBL 2.1:** los comprobantes electrónicos SUNAT se parsean directamente sin servicios externos, extrayendo: RUC del emisor, nombre del emisor, número de comprobante, fecha de emisión y vencimiento, monto, moneda, tipo de documento (factura/boleta/nota), concepto y receptor.
+  - **Soporte ZIP:** los portales como efacturacion.pe entregan comprobantes en archivos ZIP. El sistema descomprime automáticamente y procesa los XML y PDF contenidos.
+  - **Validación SUNAT en tiempo real:** cada comprobante se consulta contra el portal libre de SUNAT (`consultaUnificadaLibre`) para obtener el estado del comprobante (ACEPTADO / ANULADO / NO EXISTE), el estado del contribuyente (ACTIVO / BAJA DEFINITIVA / etc.) y la condición de domicilio (HABIDO / NO HABIDO / etc.).
+  - Busca en la tabla de referencias para identificar la empresa remitente a partir del RUC extraído o del dominio del correo.
+  - Asigna departamento responsable basándose en el tipo de documento y empresa origen.
   - Genera sugerencias de derivación que se presentan en el panel web.
+
+> **Nota sobre Google Document AI:** el sistema incluye soporte opcional para Document AI (configurable mediante variable de entorno `USE_DOCUMENT_AI`). Dado que el flujo principal trabaja con XML estructurado en formato SUNAT, esta integración no es necesaria para el caso de uso central y no genera costo operativo. Puede activarse en el futuro si se requiere extraer datos de PDFs escaneados sin capa de texto.
 
 - **Cloud Storage / Google Sheets API:**
   - Almacena los documentos adjuntos (PDF, imágenes) en almacenamiento en la nube para acceso futuro sin depender de que el correo original esté disponible.
@@ -137,13 +144,17 @@ El flujo completo funciona así:
 
 1. Un correo con factura llega a Outlook.
 2. Workato lo detecta en los próximos 5 minutos.
-3. Extrae datos preliminares (remitente, fecha, nombres de archivos).
-4. Envía la información a Google Cloud Functions.
-5. Cloud Functions busca en la tabla de referencias para identificar empresa y departamento.
-6. Almacena el registro en Firestore/BigTable.
-7. Descarga el adjunto y lo guarda en Cloud Storage.
-8. El panel web refleja la nueva factura con toda la información compilada.
-9. El usuario responsable ve el resumen, valida la clasificación (o la ajusta), y marca como "listo para derivar".
+3. Extrae datos preliminares (remitente, fecha, asunto) y envía los archivos adjuntos (XML, PDF, ZIP) codificados hacia Google Cloud.
+4. Cloud recibe los archivos y determina su tipo:
+   - Si es **ZIP** (formato típico de efacturacion.pe y portales SUNAT), lo descomprime y procesa los XML y PDF internos.
+   - Si es **XML UBL 2.1** (comprobante electrónico SUNAT), extrae directamente: RUC, emisor, número, fecha, monto, moneda, tipo de documento, concepto y receptor. No se necesita ningún servicio externo de reconocimiento de texto.
+   - Si es **PDF**, se extrae texto directamente del archivo digital (para PDFs con texto seleccionable).
+5. Con el RUC, número de comprobante, serie y fecha extraídos, se consulta en tiempo real el **portal libre de SUNAT** para validar: estado del comprobante (ACEPTADO / ANULADO / NO EXISTE), estado del contribuyente y condición de domicilio.
+6. Cloud Functions busca en la tabla de referencias para identificar empresa y departamento (usando el RUC extraído o el dominio del correo).
+7. Almacena el registro completo en Firestore: datos extraídos, validación SUNAT, clasificación y metadata del correo.
+8. Guarda el adjunto original en Cloud Storage.
+9. El panel web refleja la nueva factura con toda la información compilada, incluyendo la validación SUNAT.
+10. El usuario responsable ve el resumen, valida la clasificación (o la ajusta), y marca como "listo para derivar".
 
 ## 4. Beneficios de la solución
 
@@ -169,9 +180,12 @@ El flujo completo funciona así:
    - Validación de filtros con ejemplos reales del correo histórico.
 3. **Implementación en Google Cloud Platform:**
    - Base de datos para almacenar registro de facturas y referencias de empresas.
-   - Lógica de clasificación automática (búsqueda de empresa por dominio, análisis de contenido).
-   - Almacenamiento seguro de documentos adjuntos.
-   - Integración con Workato para recibir y procesar datos en tiempo real.
+   - **Extracción nativa de campos desde XML UBL 2.1** (formato estándar SUNAT): RUC, emisor, receptor, número de comprobante, fecha de emisión y vencimiento, monto, moneda y tipo de documento.
+   - **Soporte para archivos ZIP** (formato de portales como efacturacion.pe): descompresión automática y procesamiento de los XML y PDF contenidos.
+   - **Validación de comprobantes contra el portal libre de SUNAT**: estado del comprobante (ACEPTADO / ANULADO / NO EXISTE), estado del contribuyente (ACTIVO / BAJA), condición de domicilio (HABIDO / NO HABIDO).
+   - Lógica de clasificación automática (búsqueda de empresa por RUC extraído o dominio de correo).
+   - Almacenamiento seguro de documentos adjuntos en Cloud Storage.
+   - Integración con Workato para recibir archivos binarios y procesarlos en tiempo real.
 4. **Desarrollo del panel web de usuario:**
    - Tabla de facturas con información compilada: empresa, remitente, fecha, tipo, monto, estado.
    - Funcionalidades: filtros por empresa/departamento/fecha, búsqueda, ordenamiento.
@@ -196,7 +210,7 @@ El flujo completo funciona así:
 ### No incluye en esta propuesta
 
 1. Integración con sistemas de contabilidad o ERP (SAP, NetSuite, Xero, etc.). Si se requiere en fases posteriores, se cotizará por separado.
-2. Extracción automatizada de datos de imágenes escaneadas usando reconocimiento óptico de caracteres (OCR). La solución trabaja con metadatos del correo y documents en formato digital estándar.
+2. Extracción de datos mediante OCR desde imágenes escaneadas (documentos en papel fotografiados o escaneados sin capa de texto). La solución trabaja con documentos en formato digital estándar: XML UBL (comprobantes electrónicos SUNAT) y PDF con texto seleccionable. Si en una fase posterior se requiere procesar imágenes escaneadas, puede activarse Google Document AI como módulo opcional.
 3. Modificación de la infraestructura de Outlook (creación de buzones compartidos, reglas de filtro a nivel de servidor, etc.). Se asume acceso a Outlook convencional del usuario final.
 4. Procesamiento de facturas en idiomas distintos al español. Las reglas se acotarán a documentos en español e inglés.
 5. Interfaz móvil. El panel web es responsivo y funciona en celulares, pero no se desarrollará una aplicación mobile nativa dedicada.
@@ -266,27 +280,28 @@ Se da soporte inicial durante 5 días calendario para responder preguntas, resol
 |---|---|---:|---|
 | 1 | Levantamiento y mapeo de referencias | 4 | Semana 1 |
 | 2 | Configuración de Workato | 5 | Semana 1-2 |
-| 3 | Base de datos y lógica de clasificación | 8 | Semana 2-3 |
+| 3 | Base de datos, extracción XML y lógica de clasificación | 8 | Semana 2-3 |
+| 3b | Integración con SUNAT (validación de comprobantes) | 5 | Semana 2-3 |
 | 4 | Desarrollo del panel web | 7 | Semana 2-3 |
 | 5 | Integración de extremo a extremo | 4 | Semana 3 |
 | 6 | Pruebas finales y capacitación | 2 | Semana 4 |
-| **Total** |  | **30 horas** | **4 semanas** |
+| **Total** |  | **34 horas** | **4 semanas** |
 
-**Costo total:** 30 horas × USD 50/hora = **USD 1,500**
+**Costo total:** 34 horas × USD 50/hora = **USD 1,700**
 
 ## 8. Inversión y términos
 
 ### Costo
 
 - **Tarifa:** USD 50 por hora
-- **Horas estimadas:** 30 horas
-- **Inversión total:** USD 1,500
+- **Horas estimadas:** 34 horas
+- **Inversión total:** USD 1,700
 
 ### Infraestructura en la nube (Google Cloud)
 
-La infraestructura en Google Cloud requerida para operar el sistema (base de datos, almacenamiento, funciones) tiene un costo típico de **USD 50-100 por mes** en nivel de producción inicial, dependiendo del volumen de facturas.
+La infraestructura en Google Cloud requerida para operar el sistema (Cloud Run, Firestore, Cloud Storage) tiene un costo típico de **USD 20-50 por mes** en nivel de producción inicial, dependiendo del volumen de facturas. Al procesar documentos XML de forma nativa sin servicios de visión artificial o machine learning, el costo operativo se reduce significativamente respecto a arquitecturas que dependen de Document AI o Vision API.
 
-Se propone completar el desarrollo, pruebas y entrega en esta propuesta. Los costos operativos mensuales de infraestructura serán responsabilidad del cliente (facturable directamente por Google Cloud), pero el monto es accesible incluso para pequeños volúmenes de procesamiento.
+Se propone completar el desarrollo, pruebas y entrega en esta propuesta. Los costos operativos mensuales de infraestructura serán responsabilidad del cliente (facturable directamente por Google Cloud). La validación de comprobantes contra SUNAT utiliza el portal público gratuito y no genera costo adicional.
 
 ### Términos de pago
 
@@ -324,7 +339,13 @@ El presente presupuesto cubre el alcance definido en la Sección 5. Cambios de a
 
 **Descripción:** Si las facturas no siguen formatos estandarizados (tamaños diferentes, posición de datos variable, información en distintas páginas), la extracción automática de datos podría ser inconsistente.
 
-**Mitigación:** La solución se enfoca en datos disponibles en metadatos del correo (remitente, fecha, asunto) y no depende de análisis profundo del contenido del documento. Los datos dentro de la factura que no se extraigan automáticamente se pueden agregar de forma manual en el panel si es crítico.
+**Mitigación:** El sistema prioriza el parseo de XML UBL 2.1, que es un formato estructurado y normado por SUNAT. Esto elimina la variabilidad de diseño presente en documentos visuales. Para PDFs con texto seleccionable, se aplica extracción directa del contenido digital. Los casos donde no se extraiga automáticamente algún campo se marcan para revisión manual en el panel.
+
+### Riesgo 5: Disponibilidad del portal de consultas de SUNAT
+
+**Descripción:** El portal libre de SUNAT (`consultaUnificadaLibre`) puede estar temporalmente no disponible por mantenimiento o cambios en su estructura.
+
+**Mitigación:** La validación SUNAT es un paso complementario: si el portal no está disponible, el documento se registra igualmente con el campo de validación en estado pendiente. El sistema reintenta la validación de forma automática en el siguiente ciclo. Cualquier cambio estructural en la interfaz de SUNAT se atenderá como parte del soporte post-entrega o en mantenimiento programado.
 
 ## 10. Próximos pasos
 

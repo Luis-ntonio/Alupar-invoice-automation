@@ -31,6 +31,7 @@ exports.config = {
     documentAiProcessorId: process.env.DOCUMENT_AI_PROCESSOR_ID,
     documentAiProcessorVersion: process.env.DOCUMENT_AI_PROCESSOR_VERSION,
     workatoSharedSecret: process.env.WORKATO_SHARED_SECRET,
+    enableWorkatoRemoteUrlsByDefault: process.env.ENABLE_WORKATO_REMOTE_URLS === "true",
     localDataDir: node_path_1.default.resolve(process.env.LOCAL_DATA_DIR ?? "./data"),
     localStorageDir: node_path_1.default.resolve(process.env.LOCAL_STORAGE_DIR ?? "./storage")
 };

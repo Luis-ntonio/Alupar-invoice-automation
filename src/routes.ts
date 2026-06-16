@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import express from "express";
 import multer from "multer";
 import { z } from "zod";
@@ -6,12 +7,15 @@ import { config } from "./config";
 import { BlobStorageService } from "./services/blobStorage";
 import { detectFileType, extractFields } from "./services/parser";
 import { createRepository } from "./services/repository";
-import { filterAccessibleFiles, streamZipToWritable } from "./services/zipService";
+import { validarEnSunat } from "./services/sunatService";
+import { extractSupportedZipEntries, extractZipContents, filterAccessibleFiles, streamZipToWritable } from "./services/zipService";
 import { classifyDocument, inferConcept } from "./utils/classifier";
 import { createSha256 } from "./utils/hash";
-import { AttachedFile, EmailRecord, IncomingMetadata } from "./types";
+import { AttachedFile, EmailRecord, IncomingMetadata, SunatValidacion } from "./types";
 
-const upload = multer({ storage: multer.memoryStorage() });
+// fieldSize de 25MB: Workato envía archivos como hex en campos de texto
+// (1 byte → 2 chars hex), por lo que un PDF de 10MB ocupa ~20MB como texto.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fieldSize: 25 * 1024 * 1024 } });
 const router = express.Router();
 const repository = createRepository();
 const blobStorage = new BlobStorageService();
@@ -20,45 +24,659 @@ const metadataSchema = z.object({
   messageId: z.string().optional(),
   sender: z.string().optional(),
   subject: z.string().optional(),
-  receivedAt: z.string().optional()
+  receivedAt: z.string().optional(),
+  bodyHtml: z.string().optional(),
+  bodyText: z.string().optional(),
+  body: z.string().optional(),
+  html: z.string().optional(),
+  emailBodyHtml: z.string().optional()
 });
 
-router.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "proyecto2-gcp-facturas", timestamp: new Date().toISOString() });
-});
+function parseBooleanFlag(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "si";
+}
 
-router.post("/intake", upload.fields([{ name: "files" }, { name: "files[]" }]), async (req, res) => {
-  if (config.workatoSharedSecret) {
-    const token = req.header("x-workato-secret");
-    if (token !== config.workatoSharedSecret) {
-      return res.status(401).json({ error: "No autorizado: x-workato-secret invalido." });
+// ── Workato hex-binary helpers ───────────────────────────────────────────────
+
+function hexToBuffer(hex: string): Buffer {
+  const raw = hex.startsWith("0x") || hex.startsWith("0X") ? hex.slice(2) : hex;
+  // Decodifica solo el tramo hex contiguo desde el inicio.
+  // Evita "rescatar" dígitos sueltos de sufijos tipo "...(5333 bytes more)",
+  // que corrompen el binario.
+  let i = 0;
+  let out = "";
+  while (i < raw.length) {
+    const ch = raw[i];
+    if (/[0-9a-fA-F]/.test(ch)) {
+      out += ch;
+      i++;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      i++;
+      continue;
+    }
+    break;
+  }
+  if (out.length === 0) return Buffer.alloc(0);
+  const even = out.length % 2 === 0 ? out : out.slice(0, -1);
+  if (i < raw.length) {
+    console.warn(`[hexToBuffer] Payload hex truncado en índice ${i}; se ignoró sufijo no-hex.`);
+  }
+  if (even.length !== out.length) {
+    console.warn("[hexToBuffer] Longitud hex impar detectada, se recorta el último nibble.");
+  }
+  return Buffer.from(even, "hex");
+}
+
+function makeWorkatoFile(
+  originalname: string,
+  mimetype: string,
+  buffer: Buffer
+): Express.Multer.File {
+  return {
+    fieldname: "files",
+    originalname,
+    encoding: "7bit",
+    mimetype,
+    buffer,
+    size: buffer.length,
+    stream: null as any,
+    destination: "",
+    filename: originalname,
+    path: "",
+  };
+}
+
+interface WorkatoRemoteFileRef {
+  url: string;
+  originalname: string;
+  mimetype: string;
+}
+
+type WorkatoFileEntry = {
+  value?: string;
+  content_type?: string;
+  contentType?: string;
+  original_filename?: string;
+  originalFilename?: string;
+  url?: string;
+  download_url?: string;
+  downloadUrl?: string;
+};
+
+function normalizeWorkatoFileEntry(dataObj: Record<string, unknown>): WorkatoFileEntry {
+  return {
+    value: typeof dataObj["value"] === "string" ? dataObj["value"] as string : undefined,
+    content_type:
+      typeof dataObj["content_type"] === "string"
+        ? dataObj["content_type"] as string
+        : typeof dataObj["contentType"] === "string"
+          ? dataObj["contentType"] as string
+          : undefined,
+    original_filename:
+      typeof dataObj["original_filename"] === "string"
+        ? dataObj["original_filename"] as string
+        : typeof dataObj["originalFilename"] === "string"
+          ? dataObj["originalFilename"] as string
+          : undefined,
+    url:
+      typeof dataObj["url"] === "string"
+        ? dataObj["url"] as string
+        : typeof dataObj["download_url"] === "string"
+          ? dataObj["download_url"] as string
+          : typeof dataObj["downloadUrl"] === "string"
+            ? dataObj["downloadUrl"] as string
+            : undefined,
+  };
+}
+
+function inferFilenameFromUrl(fileUrl: string): string {
+  try {
+    const pathname = new URL(fileUrl).pathname;
+    const name = path.basename(pathname);
+    return name || "file";
+  } catch {
+    return "file";
+  }
+}
+
+async function downloadWorkatoRemoteFile(ref: WorkatoRemoteFileRef): Promise<Express.Multer.File | null> {
+  const timeoutMs = 30000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(ref.url, { signal: controller.signal, redirect: "follow" });
+    if (!response.ok) {
+      console.warn(`[downloadWorkatoRemoteFile] ${response.status} al descargar ${ref.url}`);
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    if (buffer.length === 0) {
+      console.warn(`[downloadWorkatoRemoteFile] Archivo vacío descargado desde ${ref.url}`);
+      return null;
+    }
+    const mimeType = ref.mimetype || response.headers.get("content-type")?.split(";")[0] || "application/octet-stream";
+    const originalname = ref.originalname || inferFilenameFromUrl(response.url || ref.url);
+    console.log(`[downloadWorkatoRemoteFile] OK ${originalname} (${mimeType}, ${buffer.length}B)`);
+    return makeWorkatoFile(originalname, mimeType, buffer);
+  } catch (err) {
+    console.warn(`[downloadWorkatoRemoteFile] Error descargando ${ref.url}: ${err}`);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function downloadWorkatoRemoteFiles(refs: WorkatoRemoteFileRef[]): Promise<Express.Multer.File[]> {
+  const files: Express.Multer.File[] = [];
+  for (const ref of refs) {
+    const file = await downloadWorkatoRemoteFile(ref);
+    if (file) files.push(file);
+  }
+  return files;
+}
+
+/** Convierte un valor (hex 0x…, texto ASCII/UTF-8, o string decodificado de Ruby inspect) a Buffer. */
+function valueToBuffer(val: string): Buffer {
+  if (val.startsWith("0x") || val.startsWith("0X")) return hexToBuffer(val);
+  // latin1 (= binary) preserva bytes 0x00–0xFF sin alteración.
+  // Es correcto tanto para strings decodificados de Ruby inspect (\xNN → char)
+  // como para texto ASCII puro (XML, CSV, etc.).
+  return Buffer.from(val, "latin1");
+}
+
+/**
+ * Parser mínimo para el formato Ruby Hash#inspect.
+ *
+ * Workato serializa arrays de objetos con binarios usando este formato
+ * cuando el campo está marcado como no-binario en el esquema HTTP connector.
+ * Ejemplo: [{"data"=>{"content_type"=>"application/pdf", "value"=>"%PDF...", "original_filename"=>"file.pdf"}}]
+ *
+ * Soporta: strings con \xNN, \", \\, \r, \n, \t; arrays []; hashes {}; nil/true/false; números.
+ */
+function parseRubyValue(input: string, pos: { i: number }): unknown {
+  // skip whitespace
+  while (pos.i < input.length && (input[pos.i] === " " || input[pos.i] === "\t" || input[pos.i] === "\r" || input[pos.i] === "\n")) pos.i++;
+  if (pos.i >= input.length) return undefined;
+  const ch = input[pos.i];
+
+  if (ch === '"') {
+    pos.i++; // skip opening "
+    const parts: string[] = [];
+    while (pos.i < input.length) {
+      const c = input[pos.i];
+      if (c === '"') { pos.i++; return parts.join(""); } // closing "
+      if (c === '\\' && pos.i + 1 < input.length) {
+        pos.i++;
+        const e = input[pos.i];
+        if (e === 'x' && pos.i + 2 < input.length) {
+          // \xNN — byte en hex, puede ser no-ASCII
+          pos.i++;
+          const hex = input.slice(pos.i, pos.i + 2);
+          pos.i += 2;
+          parts.push(String.fromCharCode(parseInt(hex, 16)));
+        } else {
+          const ESC: Record<string, string> = { n: "\n", r: "\r", t: "\t", '"': '"', '\\': '\\', '0': "\0" };
+          parts.push(ESC[e] ?? e);
+          pos.i++;
+        }
+      } else {
+        parts.push(c);
+        pos.i++;
+      }
+    }
+    return parts.join("");
+  }
+
+  if (ch === '[') {
+    pos.i++;
+    const arr: unknown[] = [];
+    while (pos.i < input.length) {
+      while (pos.i < input.length && (input[pos.i] === " " || input[pos.i] === "\t" || input[pos.i] === "\r" || input[pos.i] === "\n")) pos.i++;
+      if (input[pos.i] === ']') { pos.i++; break; }
+      arr.push(parseRubyValue(input, pos));
+      while (pos.i < input.length && (input[pos.i] === " " || input[pos.i] === "\t" || input[pos.i] === "\r" || input[pos.i] === "\n")) pos.i++;
+      if (pos.i < input.length && input[pos.i] === ',') pos.i++;
+    }
+    return arr;
+  }
+
+  if (ch === '{') {
+    pos.i++;
+    const obj: Record<string, unknown> = {};
+    while (pos.i < input.length) {
+      while (pos.i < input.length && (input[pos.i] === " " || input[pos.i] === "\t" || input[pos.i] === "\r" || input[pos.i] === "\n")) pos.i++;
+      if (input[pos.i] === '}') { pos.i++; break; }
+      const key = parseRubyValue(input, pos) as string;
+      while (pos.i < input.length && (input[pos.i] === " " || input[pos.i] === "\t" || input[pos.i] === "\r" || input[pos.i] === "\n")) pos.i++;
+      if (pos.i < input.length && input[pos.i] === '=') pos.i += 2; // skip =>
+      while (pos.i < input.length && (input[pos.i] === " " || input[pos.i] === "\t" || input[pos.i] === "\r" || input[pos.i] === "\n")) pos.i++;
+      obj[key] = parseRubyValue(input, pos);
+      while (pos.i < input.length && (input[pos.i] === " " || input[pos.i] === "\t" || input[pos.i] === "\r" || input[pos.i] === "\n")) pos.i++;
+      if (pos.i < input.length && input[pos.i] === ',') pos.i++;
+    }
+    return obj;
+  }
+
+  if (input.startsWith("nil",   pos.i)) { pos.i += 3; return null;  }
+  if (input.startsWith("true",  pos.i)) { pos.i += 4; return true;  }
+  if (input.startsWith("false", pos.i)) { pos.i += 5; return false; }
+
+  // Número
+  const numStart = pos.i;
+  if (input[pos.i] === '-') pos.i++;
+  while (pos.i < input.length && ((input[pos.i] >= '0' && input[pos.i] <= '9') || input[pos.i] === '.')) pos.i++;
+  if (pos.i > numStart) return parseFloat(input.slice(numStart, pos.i));
+
+  pos.i++; // skip carácter desconocido
+  return undefined;
+}
+
+/**
+ * Extrae archivos del body de una request Workato (multipart/form-data).
+ *
+ * Workato puede enviar el array `files` de varias formas:
+ *
+ *   A) body["files"] es un ARRAY pre-parseado por express.urlencoded/qs
+ *      (ocurre cuando Workato serializa el array como campos anidados).
+ *      Cada elemento: { data: { value: "0x…", content_type: "…", original_filename: "…" } }
+ *
+ *   B) body["files"] es un JSON string que se puede parsear a array.
+ *      Mismo formato interior que A.
+ *
+ *   C) Campos planos con bracket notation:
+ *      body["files[0][data][value]"] = "0x…"
+ *      body["files[0][data][content_type]"] = "application/pdf"
+ *      body["files[0][data][original_filename]"] = "file.pdf"
+ *
+ *   D) body["files[0][data]"] = objeto ya parseado o JSON string con { value, content_type, original_filename }
+ *
+ * En todos los casos `value` puede ser "0x…" (binario hex) o texto plano UTF-8.
+ */
+function extractWorkatoFiles(body: Record<string, unknown>): Express.Multer.File[] {
+  const result: Express.Multer.File[] = [];
+  const tag = "[extractWorkatoFiles]";
+
+  // Dump de claves del body para diagnóstico
+  const bodyKeysSummary = Object.keys(body).map(k => {
+    const v = body[k];
+    const typeStr = Array.isArray(v) ? `Array(${(v as unknown[]).length})` : typeof v;
+    return `${k}:${typeStr}`;
+  });
+  console.log(tag, "bodyKeys:", JSON.stringify(bodyKeysSummary));
+
+  // ── Formatos A y B: body["files"] como array o JSON string ────────────────
+  let filesField: unknown = body["files"];
+  console.log(tag, "body.files type:", Array.isArray(filesField) ? `Array(${(filesField as unknown[]).length})` : typeof filesField);
+
+  if (typeof filesField === "string") {
+    const filesStr = filesField;
+    console.log(tag, "body.files es string, prefijo:", filesStr.substring(0, 80));
+    try {
+      filesField = JSON.parse(filesStr);
+      console.log(tag, "JSON.parse OK, tipo:", Array.isArray(filesField) ? `Array(${(filesField as unknown[]).length})` : typeof filesField);
+    } catch {
+      if (filesStr.includes("=>")) {
+        // Formato Ruby Hash inspect: Workato serializa el array con =>, \xNN para binarios
+        console.log(tag, "Formato Ruby Hash detectado (contiene =>), parseando con parseRubyValue...");
+        try {
+          const pos = { i: 0 };
+          filesField = parseRubyValue(filesStr, pos);
+          console.log(tag, "parseRubyValue OK, tipo:", Array.isArray(filesField) ? `Array(${(filesField as unknown[]).length})` : typeof filesField);
+        } catch (e2) {
+          console.log(tag, "parseRubyValue fall\u00f3:", (e2 as Error).message);
+          filesField = undefined;
+        }
+      } else {
+        console.log(tag, "JSON.parse fall\u00f3 y no es Ruby hash.");
+        filesField = undefined;
+      }
+    }
+  }
+
+  if (Array.isArray(filesField)) {
+    console.log(tag, `Formato A/B: procesando ${(filesField as unknown[]).length} items`);
+    for (let i = 0; i < (filesField as unknown[]).length; i++) {
+      const item = (filesField as unknown[])[i];
+      const d = (item as any)?.data ?? item;
+      console.log(tag, `  item[${i}]: tipo d=${typeof d}, keys=${d && typeof d === "object" ? JSON.stringify(Object.keys(d as object)) : String(d).substring(0, 80)}`);
+
+      let dataObj: Record<string, unknown>;
+      if (typeof d === "string") {
+        try { dataObj = JSON.parse(d); } catch (e) { console.log(tag, `  item[${i}] d es string pero JSON.parse falló:`, (e as Error).message); continue; }
+      } else if (d && typeof d === "object") {
+        dataObj = d as Record<string, unknown>;
+      } else {
+        console.log(tag, `  item[${i}] d no es string ni objeto, skip`);
+        continue;
+      }
+
+      const rawValue = dataObj["value"];
+      console.log(tag, `  item[${i}] value type=${typeof rawValue}, hasValue=${!!rawValue}, ` +
+        `prefix=${typeof rawValue === "string" ? rawValue.substring(0, 10) : "N/A"}`);
+
+      if (!rawValue || typeof rawValue !== "string") { console.log(tag, `  item[${i}] sin value, skip`); continue; }
+      const buffer = valueToBuffer(rawValue);
+      console.log(tag, `  item[${i}] buffer.length=${buffer.length}`);
+      if (buffer.length === 0) { console.log(tag, `  item[${i}] buffer vacío, skip`); continue; }
+      const fileName = (dataObj["original_filename"] ?? dataObj["originalFilename"] ?? "file") as string;
+      const mimeType = (dataObj["content_type"] ?? dataObj["contentType"] ?? "application/octet-stream") as string;
+      console.log(tag, `  item[${i}] OK → ${fileName} (${mimeType}, ${buffer.length}B)`);
+      result.push(makeWorkatoFile(fileName, mimeType, buffer));
+    }
+    console.log(tag, `Formato A/B terminó con ${result.length} archivos`);
+    if (result.length) return result;
+  } else {
+    console.log(tag, "body.files no es array, probando formatos C/D...");
+  }
+
+  // ── Formato D: body["files[N][data]"] como objeto o JSON string ───────────
+  type FileEntry = { value?: string; content_type?: string; original_filename?: string };
+  const fileMapD = new Map<number, FileEntry>();
+  for (const [key, val] of Object.entries(body)) {
+    const m = key.match(/^files\[(\d+)\]\[data\]$/);
+    if (!m) continue;
+    console.log(tag, `Formato D: encontrado key="${key}" tipo=${typeof val}`);
+    const idx = Number(m[1]);
+    let parsed: unknown = val;
+    if (typeof val === "string") {
+      try { parsed = JSON.parse(val); } catch { console.log(tag, `  Formato D key ${key} JSON.parse falló`); continue; }
+    }
+    if (parsed && typeof parsed === "object") {
+      fileMapD.set(idx, parsed as FileEntry);
+    }
+  }
+  if (fileMapD.size > 0) {
+    console.log(tag, `Formato D: ${fileMapD.size} entradas`);
+    for (const [, entry] of [...fileMapD.entries()].sort((a, b) => a[0] - b[0])) {
+      if (!entry.value) { console.log(tag, "  Formato D entry sin value, skip"); continue; }
+      const buffer = valueToBuffer(entry.value);
+      if (buffer.length === 0) continue;
+      result.push(makeWorkatoFile(
+        entry.original_filename ?? "file",
+        entry.content_type ?? "application/octet-stream",
+        buffer
+      ));
+    }
+    if (result.length) return result;
+  }
+
+  // ── Formato C: bracket notation files[N][data][prop] como campos planos ───
+  const fileMapC = new Map<number, FileEntry>();
+  for (const [key, val] of Object.entries(body)) {
+    const m = key.match(/^files\[(\d+)\]\[data\]\[(.+)\]$/);
+    if (!m || typeof val !== "string") continue;
+    console.log(tag, `Formato C: key="${key}"`);
+    const idx = Number(m[1]);
+    const prop = m[2];
+    if (!fileMapC.has(idx)) fileMapC.set(idx, {});
+    const entry = fileMapC.get(idx)!;
+    if (prop === "value") entry.value = val;
+    else if (prop === "content_type") entry.content_type = val;
+    else if (prop === "original_filename") entry.original_filename = val;
+  }
+  if (fileMapC.size > 0) {
+    console.log(tag, `Formato C: ${fileMapC.size} entradas`);
+  }
+  for (const [, entry] of [...fileMapC.entries()].sort((a, b) => a[0] - b[0])) {
+    if (!entry.value) continue;
+    const buffer = valueToBuffer(entry.value);
+    if (buffer.length === 0) continue;
+    result.push(makeWorkatoFile(
+      entry.original_filename ?? "file",
+      entry.content_type ?? "application/octet-stream",
+      buffer
+    ));
+  }
+
+  console.log(tag, `Total extraídos: ${result.length}`);
+  return result;
+}
+
+function extractWorkatoRemoteFileRefs(body: Record<string, unknown>): WorkatoRemoteFileRef[] {
+  const result: WorkatoRemoteFileRef[] = [];
+  const tag = "[extractWorkatoRemoteFileRefs]";
+
+  const pushRef = (entry: WorkatoFileEntry, source: string) => {
+    if (!entry.url) return;
+    const originalname = entry.original_filename ?? inferFilenameFromUrl(entry.url);
+    const mimetype = entry.content_type ?? "application/octet-stream";
+    console.log(tag, `${source} OK → ${originalname} (${mimetype}) ${entry.url}`);
+    result.push({ url: entry.url, originalname, mimetype });
+  };
+
+  let filesField: unknown = body["files"];
+  if (typeof filesField === "string") {
+    const filesStr = filesField;
+    try {
+      filesField = JSON.parse(filesStr);
+    } catch {
+      if (filesStr.includes("=>")) {
+        try {
+          const pos = { i: 0 };
+          filesField = parseRubyValue(filesStr, pos);
+        } catch {
+          filesField = undefined;
+        }
+      } else {
+        filesField = undefined;
+      }
+    }
+  }
+
+  if (Array.isArray(filesField)) {
+    for (let i = 0; i < filesField.length; i++) {
+      const item = filesField[i];
+      const d = (item as any)?.data ?? item;
+      let dataObj: Record<string, unknown> | undefined;
+      if (typeof d === "string") {
+        try { dataObj = JSON.parse(d); } catch { continue; }
+      } else if (d && typeof d === "object") {
+        dataObj = d as Record<string, unknown>;
+      }
+      if (!dataObj) continue;
+      pushRef(normalizeWorkatoFileEntry(dataObj), `item[${i}]`);
+    }
+    if (result.length) return result;
+  }
+
+  const fileMapD = new Map<number, WorkatoFileEntry>();
+  for (const [key, val] of Object.entries(body)) {
+    const m = key.match(/^files\[(\d+)\]\[data\]$/);
+    if (!m) continue;
+    let parsed: unknown = val;
+    if (typeof val === "string") {
+      try { parsed = JSON.parse(val); } catch { continue; }
+    }
+    if (parsed && typeof parsed === "object") {
+      fileMapD.set(Number(m[1]), normalizeWorkatoFileEntry(parsed as Record<string, unknown>));
+    }
+  }
+  for (const [idx, entry] of [...fileMapD.entries()].sort((a, b) => a[0] - b[0])) {
+    pushRef(entry, `Formato D[${idx}]`);
+  }
+  if (result.length) return result;
+
+  const fileMapC = new Map<number, WorkatoFileEntry>();
+  for (const [key, val] of Object.entries(body)) {
+    const m = key.match(/^files\[(\d+)\]\[data\]\[(.+)\]$/);
+    if (!m || typeof val !== "string") continue;
+    const idx = Number(m[1]);
+    const prop = m[2];
+    if (!fileMapC.has(idx)) fileMapC.set(idx, {});
+    const entry = fileMapC.get(idx)!;
+    if (prop === "value") entry.value = val;
+    else if (prop === "content_type") entry.content_type = val;
+    else if (prop === "original_filename") entry.original_filename = val;
+    else if (prop === "url" || prop === "download_url" || prop === "downloadUrl") entry.url = val;
+  }
+  for (const [idx, entry] of [...fileMapC.entries()].sort((a, b) => a[0] - b[0])) {
+    pushRef(entry, `Formato C[${idx}]`);
+  }
+
+  return result;
+}
+
+type IntakeSuccessResult = {
+  statusCode: 202;
+  body: {
+    requestId: string;
+    accepted: number;
+    rejected: number;
+    duplicate?: boolean;
+    record: EmailRecord;
+  };
+};
+
+type IntakeErrorResult = {
+  statusCode: 400;
+  body: { error: string };
+};
+
+function ensureAuthorized(
+  req: express.Request,
+  options?: { allowWhenSecretMissingInRequest?: boolean }
+): { authorized: true } | { authorized: false; response: { statusCode: 401; body: { error: string } } } {
+  if (!config.workatoSharedSecret) {
+    return { authorized: true };
+  }
+
+  const token = req.header("x-workato-secret");
+  if (options?.allowWhenSecretMissingInRequest && !token) {
+    return { authorized: true };
+  }
+
+  if (token !== config.workatoSharedSecret) {
+    return { authorized: false, response: { statusCode: 401, body: { error: "No autorizado: x-workato-secret invalido." } } };
+  }
+
+  return { authorized: true };
+}
+
+function normalizeIncomingMetadata(body: Record<string, unknown>): IncomingMetadata {
+  const bodyNorm = { ...body, receivedAt: body.receivedAt ?? body.recievedAt };
+  const metadataResult = metadataSchema.safeParse(bodyNorm);
+  if (!metadataResult.success) return {};
+
+  const data = metadataResult.data;
+  const emailBodyHtml = data.bodyHtml ?? data.emailBodyHtml ?? data.html ?? data.body;
+  const bodyText = data.bodyText;
+
+  return {
+    ...data,
+    bodyHtml: emailBodyHtml,
+    bodyText,
+    body: data.body,
+    html: data.html,
+    emailBodyHtml: data.emailBodyHtml,
+  };
+}
+
+async function collectIncomingFiles(req: express.Request): Promise<{
+  files: Express.Multer.File[];
+  useRemoteFiles: boolean;
+  workatoRemoteRefs: WorkatoRemoteFileRef[];
+}> {
+  const useRemoteFiles =
+    parseBooleanFlag((req.body as Record<string, unknown>)?.useRemoteFiles) ||
+    parseBooleanFlag((req.body as Record<string, unknown>)?.useRemoteUrls) ||
+    parseBooleanFlag((req.body as Record<string, unknown>)?.downloadRemoteFiles) ||
+    config.enableWorkatoRemoteUrlsByDefault;
+  const multerFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
+  const workatoFiles = extractWorkatoFiles(req.body as Record<string, unknown>);
+  const workatoRemoteRefs = extractWorkatoRemoteFileRefs(req.body as Record<string, unknown>);
+  const downloadedRemoteFiles = useRemoteFiles ? await downloadWorkatoRemoteFiles(workatoRemoteRefs) : [];
+  if (workatoRemoteRefs.length > 0 && !useRemoteFiles) {
+    console.log("[intake] Se recibieron URLs remotas, pero useRemoteFiles=false; se ignoran para preservar el flujo actual.");
+  }
+
+  return {
+    files: [...multerFiles, ...workatoFiles, ...downloadedRemoteFiles],
+    useRemoteFiles,
+    workatoRemoteRefs,
+  };
+}
+
+function buildNoFilesResponse(req: express.Request, useRemoteFiles: boolean, workatoRemoteRefs: WorkatoRemoteFileRef[]) {
+  const multerFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
+  const bodyKeys = Object.keys(req.body ?? {});
+  const bodyDebug = bodyKeys.map((k) => {
+    const v = (req.body as Record<string, unknown>)[k];
+    const typeStr = Array.isArray(v) ? `Array(${(v as unknown[]).length})` : typeof v;
+    const preview = typeof v === "string" ? v.substring(0, 60) : JSON.stringify(v).substring(0, 60);
+    return { key: k.substring(0, 80), type: typeStr, preview };
+  });
+  console.error("[intake] 0 archivos recibidos.", JSON.stringify({
+    contentType: req.headers["content-type"]?.substring(0, 200),
+    multerFileFields: multerFiles.map((f) => f.fieldname),
+    bodyKeyCount: bodyKeys.length,
+    bodyDebug,
+  }));
+  return {
+    error: "No se recibieron archivos en el campo files.",
+    debug: {
+      contentType: req.headers["content-type"]?.substring(0, 200),
+      multerFileCount: multerFiles.length,
+      useRemoteFiles,
+      workatoRemoteRefCount: workatoRemoteRefs.length,
+      bodyKeyCount: bodyKeys.length,
+      bodyKeys: bodyKeys.map((k) => k.substring(0, 80)),
+      bodySample: bodyDebug.slice(0, 10),
+    },
+  };
+}
+
+async function expandSupportedFiles(files: Express.Multer.File[]): Promise<Express.Multer.File[]> {
+  const expandedFiles: Express.Multer.File[] = [];
+  for (const file of files) {
+    if (detectFileType(file.originalname, file.mimetype, file.buffer) === "zip") {
+      try {
+        const extracted = await extractZipContents(file.buffer);
+        if (extracted.length === 0) {
+          console.warn(`[intake] ZIP vacío o sin XML/PDF: ${file.originalname}, se trata como archivo directo.`);
+          expandedFiles.push(file);
+        } else {
+          for (const inner of extracted) {
+            expandedFiles.push(makeWorkatoFile(inner.fileName, inner.mimeType, inner.buffer));
+          }
+        }
+      } catch (zipErr) {
+        console.warn(`[intake] Fallo al extraer ZIP "${file.originalname}": ${zipErr}. Se trata como archivo directo.`);
+        expandedFiles.push(file);
+      }
+    } else {
+      expandedFiles.push(file);
+    }
+  }
+  return expandedFiles;
+}
+
+async function processIntakeFiles(files: Express.Multer.File[], metadata: IncomingMetadata): Promise<IntakeSuccessResult | IntakeErrorResult> {
+  if (metadata.messageId) {
+    const existing = await repository.findByMessageId(metadata.messageId);
+    if (existing) {
+      return {
+        statusCode: 202,
+        body: { requestId: existing.id, accepted: 0, rejected: 0, duplicate: true, record: existing },
+      };
     }
   }
 
   const requestId = randomUUID();
-  const reqFiles = req.files as Record<string, Express.Multer.File[]> | undefined;
-  const files = [...(reqFiles?.["files"] ?? []), ...(reqFiles?.["files[]"] ?? [])];
-  const metadataResult = metadataSchema.safeParse(req.body);
-  const metadata: IncomingMetadata = metadataResult.success ? metadataResult.data : {};
-
-  if (files.length === 0) {
-    return res.status(400).json({ error: "No se recibieron archivos en el campo files." });
-  }
-
-  // Dedup: same messageId = same email, return existing record
-  if (metadata.messageId) {
-    const existing = await repository.findByMessageId(metadata.messageId);
-    if (existing) {
-      return res.status(202).json({ requestId: existing.id, accepted: 0, duplicate: true, record: existing });
-    }
-  }
-
   const now = new Date().toISOString();
+  const expandedFiles = await expandSupportedFiles(files);
+
   const attachedFiles: AttachedFile[] = [];
   let rejected = 0;
 
-  for (const file of files) {
-    const fileType = detectFileType(file.originalname, file.mimetype);
+  for (const file of expandedFiles) {
+    const fileType = detectFileType(file.originalname, file.mimetype, file.buffer);
     if (fileType === "unknown") { rejected++; continue; }
     const hash = createSha256(file.buffer);
     const sourcePath = await blobStorage.saveIncoming(file.buffer, requestId, file.originalname);
@@ -66,15 +684,14 @@ router.post("/intake", upload.fields([{ name: "files" }, { name: "files[]" }]), 
   }
 
   if (!attachedFiles.length) {
-    return res.status(400).json({ error: "No se recibieron archivos PDF o XML válidos." });
+    return { statusCode: 400, body: { error: "No se recibieron archivos PDF o XML válidos." } };
   }
 
-  // Extract structured data: procesar todos los XMLs y mergear (la factura UBL gana sobre el CDR)
   let extracted: Record<string, unknown> = {};
   let extractionError: string | undefined;
   try {
-    const xmlFiles = files.filter(f => detectFileType(f.originalname, f.mimetype) === "xml");
-    const pdfFile = files.find(f => detectFileType(f.originalname, f.mimetype) === "pdf");
+    const xmlFiles = expandedFiles.filter((f) => detectFileType(f.originalname, f.mimetype, f.buffer) === "xml");
+    const pdfFile = expandedFiles.find((f) => detectFileType(f.originalname, f.mimetype, f.buffer) === "pdf");
     if (xmlFiles.length > 0) {
       for (const xmlFile of xmlFiles) {
         const result = await extractFields("xml", xmlFile.buffer, xmlFile.mimetype);
@@ -94,6 +711,33 @@ router.post("/intake", upload.fields([{ name: "files" }, { name: "files[]" }]), 
   const documentType = classifyDocument(extracted);
   const concept = (extracted as any).concepto ?? inferConcept(extracted);
 
+  let sunatValidacion: SunatValidacion | undefined;
+  const numDoc = (extracted as any).numeroDocumento as string | undefined;
+  const rucExtracted = (extracted as any).ruc as string | undefined;
+  const tipoDocumento = (extracted as any).tipoDocumento as string | undefined;
+  const fechaE = (extracted as any).fechaEmision as string | undefined;
+  const montoE = (extracted as any).monto as number | undefined;
+
+  if (rucExtracted && numDoc && tipoDocumento && fechaE) {
+    const partes = numDoc.split("-");
+    if (partes.length >= 2) {
+      try {
+        sunatValidacion = await validarEnSunat({
+          numRuc: rucExtracted,
+          codComp: tipoDocumento,
+          numeroSerie: partes[0],
+          numero: partes.slice(1).join("-"),
+          fechaEmision: fechaE,
+          monto: montoE != null ? montoE.toFixed(2) : "",
+          codDocRecep: "6",
+          numDocRecep: "",
+        });
+      } catch (err) {
+        console.warn("[SUNAT] Validación falló:", err instanceof Error ? err.message : err);
+      }
+    }
+  }
+
   const record: EmailRecord = {
     id: requestId,
     metadata,
@@ -103,14 +747,154 @@ router.post("/intake", upload.fields([{ name: "files" }, { name: "files[]" }]), 
     concept,
     empresa: (extracted as any).emisor ?? "",
     ruc: (extracted as any).ruc ?? "",
+    sunatValidacion,
     status: extractionError ? "error" : "pendiente",
     error: extractionError,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
 
   await repository.save(record);
-  return res.status(202).json({ requestId, accepted: attachedFiles.length, rejected, record });
+  return {
+    statusCode: 202,
+    body: { requestId, accepted: attachedFiles.length, rejected, record },
+  };
+}
+
+function buildMassiveImportMetadata(metadata: IncomingMetadata, groupName: string): IncomingMetadata {
+  return {
+    ...metadata,
+    messageId: metadata.messageId ? `${metadata.messageId}::${groupName}` : undefined,
+    subject: metadata.subject ? `${metadata.subject} [${groupName}]` : groupName,
+  };
+}
+
+function groupFilesForMassiveImport(entries: Array<{ entryPath: string; buffer: Buffer; mimeType: string }>, sourceName: string) {
+  const groups = new Map<string, Express.Multer.File[]>();
+  const fallbackGroup = path.parse(sourceName).name || "root";
+
+  for (const entry of entries) {
+    const normalizedPath = entry.entryPath.replace(/^\/+/, "");
+    const parts = normalizedPath.split("/").filter(Boolean);
+    const groupName = parts.length > 1 ? parts[0] : fallbackGroup;
+    const fileName = parts[parts.length - 1] ?? entry.entryPath;
+    const current = groups.get(groupName) ?? [];
+    current.push(makeWorkatoFile(fileName, entry.mimeType, entry.buffer));
+    groups.set(groupName, current);
+  }
+
+  return groups;
+}
+
+function slugify(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "sin-empresa";
+}
+
+function folderName(value: string): string {
+  const raw = value.trim();
+  if (!raw) return "SIN_DATO";
+  const normalized = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, "_")
+    .replace(/-+/g, "-")
+    .replace(/^[-_.]+|[-_.]+$/g, "");
+  return (normalized || "SIN_DATO").toUpperCase();
+}
+
+const BUILD_TIME = new Date().toISOString();
+router.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "proyecto2-gcp-facturas",
+    timestamp: new Date().toISOString(),
+    buildTime: BUILD_TIME,
+    zipParser: "yauzl",
+    remoteUrlsDefault: config.enableWorkatoRemoteUrlsByDefault,
+  });
+});
+
+router.post("/intake", upload.any(), async (req, res) => {
+  const auth = ensureAuthorized(req);
+  if (!auth.authorized) {
+    return res.status(auth.response.statusCode).json(auth.response.body);
+  }
+
+  const metadata = normalizeIncomingMetadata(req.body as Record<string, unknown>);
+  const { files, useRemoteFiles, workatoRemoteRefs } = await collectIncomingFiles(req);
+
+  if (files.length === 0) {
+    return res.status(400).json(buildNoFilesResponse(req, useRemoteFiles, workatoRemoteRefs));
+  }
+
+  const result = await processIntakeFiles(files, metadata);
+  return res.status(result.statusCode).json(result.body);
+});
+
+router.post("/intake/massive", upload.any(), async (req, res) => {
+  const auth = ensureAuthorized(req, { allowWhenSecretMissingInRequest: true });
+  if (!auth.authorized) {
+    return res.status(auth.response.statusCode).json(auth.response.body);
+  }
+
+  const metadata = normalizeIncomingMetadata(req.body as Record<string, unknown>);
+  const { files, useRemoteFiles, workatoRemoteRefs } = await collectIncomingFiles(req);
+
+  if (files.length === 0) {
+    return res.status(400).json(buildNoFilesResponse(req, useRemoteFiles, workatoRemoteRefs));
+  }
+
+  const zipFiles = files.filter((file) => detectFileType(file.originalname, file.mimetype, file.buffer) === "zip");
+  if (zipFiles.length === 0) {
+    return res.status(400).json({ error: "Massive import requiere al menos un archivo ZIP." });
+  }
+
+  const groupedRecords = new Map<string, Express.Multer.File[]>();
+
+  for (const zipFile of zipFiles) {
+    const entries = await extractSupportedZipEntries(zipFile.buffer);
+    const groups = groupFilesForMassiveImport(entries, zipFile.originalname);
+    for (const [groupName, groupFiles] of groups.entries()) {
+      const current = groupedRecords.get(groupName) ?? [];
+      current.push(...groupFiles);
+      groupedRecords.set(groupName, current);
+    }
+  }
+
+  if (groupedRecords.size === 0) {
+    return res.status(400).json({ error: "El ZIP no contiene carpetas con archivos XML, PDF o ZIP válidos." });
+  }
+
+  const items: Array<{ group: string; statusCode: number; requestId?: string; accepted?: number; rejected?: number; duplicate?: boolean; error?: string; record?: EmailRecord }> = [];
+  for (const [groupName, groupFiles] of groupedRecords.entries()) {
+    const result = await processIntakeFiles(groupFiles, buildMassiveImportMetadata(metadata, groupName));
+    items.push({
+      group: groupName,
+      statusCode: result.statusCode,
+      requestId: "requestId" in result.body ? result.body.requestId : undefined,
+      accepted: "accepted" in result.body ? result.body.accepted : undefined,
+      rejected: "rejected" in result.body ? result.body.rejected : undefined,
+      duplicate: "duplicate" in result.body ? result.body.duplicate : undefined,
+      error: "error" in result.body ? result.body.error : undefined,
+      record: "record" in result.body ? result.body.record : undefined,
+    });
+  }
+
+  const created = items.filter((item) => item.statusCode === 202).length;
+  const failed = items.filter((item) => item.statusCode !== 202).length;
+
+  return res.status(failed > 0 ? 207 : 202).json({
+    imported: created,
+    failed,
+    totalGroups: groupedRecords.size,
+    items,
+  });
 });
 
 router.get("/documents", async (req, res) => {
@@ -131,6 +915,41 @@ router.get("/documents/:id", async (req, res) => {
     return res.status(404).json({ error: "Documento no encontrado." });
   }
   return res.json(item);
+});
+
+const updateDocumentSchema = z.object({
+  empresa: z.string().trim().min(1).optional(),
+  documentType: z.enum(["factura", "comprobante", "nota", "desconocido"]).optional(),
+  centroCostos: z.string().trim().min(1).optional(),
+  monto: z.number().finite().nonnegative().nullable().optional(),
+});
+
+router.patch("/documents/:id", async (req, res) => {
+  const parsed = updateDocumentSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Payload invalido para actualizar documento." });
+  }
+
+  const current = await repository.findById(req.params.id);
+  if (!current) {
+    return res.status(404).json({ error: "Documento no encontrado." });
+  }
+
+  const payload = parsed.data;
+  const updated: EmailRecord = {
+    ...current,
+    empresa: payload.empresa ?? current.empresa,
+    documentType: payload.documentType ?? current.documentType,
+    centroCostos: payload.centroCostos ?? current.centroCostos,
+    extracted: {
+      ...current.extracted,
+      monto: payload.monto === undefined ? current.extracted?.monto : payload.monto ?? undefined,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+
+  await repository.save(updated);
+  return res.json({ item: updated });
 });
 
 // Download individual file (opens PDF inline, downloads XML)
@@ -193,8 +1012,22 @@ router.post("/exports", async (req, res) => {
     return res.status(404).json({ error: "No se encontraron registros para los IDs indicados." });
   }
 
-  // Collect all files from all selected records
-  const allRefs = records.flatMap(r => r.files.map(f => ({ fileName: f.fileName, sourcePath: f.sourcePath })));
+  const usedRecordFolders = new Map<string, number>();
+  const allRefs = records.flatMap((record) => {
+    const empresaFolder = folderName(record.empresa || "SIN EMPRESA");
+    const recordBase = folderName(record.extracted?.numeroDocumento || record.id || "registro");
+    const recordKey = `${empresaFolder}/${recordBase}`;
+    const seen = (usedRecordFolders.get(recordKey) ?? 0) + 1;
+    usedRecordFolders.set(recordKey, seen);
+    const recordFolder = seen > 1 ? `${recordBase}_${seen}` : recordBase;
+
+    return record.files.map((file) => ({
+      fileName: file.fileName,
+      sourcePath: file.sourcePath,
+      zipPath: `${empresaFolder}/${recordFolder}/${file.fileName}`,
+    }));
+  });
+
   const accessible = await filterAccessibleFiles(allRefs);
   const skipped = allRefs.length - accessible.length;
 
@@ -204,7 +1037,7 @@ router.post("/exports", async (req, res) => {
 
   const dateStr = new Date().toISOString().slice(0, 10);
   res.setHeader("Content-Type", "application/zip");
-  res.setHeader("Content-Disposition", `attachment; filename="export-${dateStr}.zip"`);
+  res.setHeader("Content-Disposition", `attachment; filename="export-documentos-${dateStr}.zip"`);
   if (skipped > 0) res.setHeader("X-Skipped-Count", String(skipped));
 
   try {

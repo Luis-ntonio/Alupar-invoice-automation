@@ -3,758 +3,726 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Arquitectura · Sistema Facturas PDF/XML | Alupar</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <title>Arquitectura | Sistema Automatizado de Facturas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --blue:        #1A73E8;
-      --blue-light:  #E8F0FE;
-      --blue-dark:   #1557B0;
-      --green:       #34A853;
-      --green-light: #E6F4EA;
-      --yellow:      #FBBC04;
-      --yellow-light:#FEF7E0;
-      --red:         #EA4335;
-      --red-light:   #FCE8E6;
-      --t1: #202124;
-      --t2: #5F6368;
-      --t3: #80868B;
-      --s0: #FFFFFF;
-      --s1: #F8F9FA;
-      --s2: #F1F3F4;
-      --bd: #DADCE0;
-      --sh1: 0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
-      --sh2: 0 4px 12px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.05);
-      --sh3: 0 8px 24px rgba(0,0,0,.09), 0 3px 6px rgba(0,0,0,.05);
-      --r1: 8px; --r2: 14px; --r3: 20px;
+      --bg: #060b16;
+      --bg-2: #0a1020;
+      --card: #10192d;
+      --card-2: #141f36;
+      --line: #1f2d4f;
+      --txt: #e8eefc;
+      --muted: #9cabcc;
+      --cyan: #4fd7ff;
+      --mint: #39e7c4;
+      --amber: #ffbe55;
+      --red: #ff5f6d;
+      --blue: #5a9dff;
+      --shadow: 0 14px 36px rgba(0, 0, 0, 0.4);
+      --radius-lg: 18px;
+      --radius-md: 12px;
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
+
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--s1);
-      color: var(--t1);
-      line-height: 1.65;
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      color: var(--txt);
+      background:
+        radial-gradient(900px 450px at 20% -20%, rgba(90, 157, 255, 0.2), transparent 60%),
+        radial-gradient(900px 450px at 90% -10%, rgba(79, 215, 255, 0.16), transparent 60%),
+        linear-gradient(180deg, var(--bg) 0%, #070d1a 55%, #050915 100%);
+      min-height: 100vh;
     }
 
-    /* ── NAV ─────────────────────────────────── */
-    .nav {
-      position: sticky; top: 0; z-index: 200;
-      background: rgba(255,255,255,.92);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--bd);
-      height: 54px;
-      display: flex; align-items: center;
-      padding: 0 28px; gap: 8px;
-    }
-    .nav-logo {
-      display: flex; align-items: center; gap: 8px;
-      font-weight: 700; font-size: 14px; color: var(--t1);
-      text-decoration: none; flex-shrink: 0; margin-right: 8px;
-    }
-    .badge {
-      background: var(--blue); color: #fff;
-      font-size: 9px; font-weight: 800;
-      padding: 2px 6px; border-radius: 10px;
-      letter-spacing: .08em; text-transform: uppercase;
-    }
-    .nav-links { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; }
-    .nav-links a {
-      color: var(--t2); text-decoration: none; white-space: nowrap;
-      font-size: 13px; font-weight: 500;
-      padding: 6px 14px; border-radius: 20px;
-      transition: background .15s, color .15s;
-    }
-    .nav-links a:hover, .nav-links a.active {
-      background: var(--blue-light); color: var(--blue);
+    .wrap {
+      width: min(1200px, 94vw);
+      margin: 0 auto;
     }
 
-    /* ── HERO ────────────────────────────────── */
+    .top {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      backdrop-filter: blur(10px);
+      background: rgba(6, 11, 22, 0.85);
+      border-bottom: 1px solid rgba(79, 215, 255, 0.14);
+    }
+
+    .top-in {
+      min-height: 62px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand {
+      font-family: "Space Grotesk", sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.03em;
+      color: var(--txt);
+      text-decoration: none;
+    }
+
+    .tag-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 10px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      color: #0f1d39;
+      background: linear-gradient(90deg, var(--mint), #79f5dc);
+      font-weight: 700;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #0c8;
+      box-shadow: 0 0 12px #20ffcf;
+    }
+
+    .menu {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .menu a {
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 700;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+    }
+
+    .menu a:hover {
+      color: var(--txt);
+      border-color: rgba(79, 215, 255, 0.35);
+      background: rgba(79, 215, 255, 0.08);
+    }
+
     .hero {
-      background: linear-gradient(140deg, #0d3c8a 0%, #1A73E8 55%, #0f5bb5 100%);
-      color: #fff; padding: 60px 28px 52px; position: relative; overflow: hidden;
+      padding: 30px 0 18px;
     }
-    .hero::before, .hero::after {
-      content: ''; position: absolute; border-radius: 50%;
-      background: rgba(255,255,255,.04);
-    }
-    .hero::before { width: 540px; height: 540px; top: -220px; right: -80px; }
-    .hero::after  { width: 320px; height: 320px; bottom: -160px; left: 40px; }
-    .hero-inner  { max-width: 1000px; margin: 0 auto; position: relative; z-index: 1; }
-    .hero-eyebrow {
-      font-size: 11px; font-weight: 700; letter-spacing: .12em;
-      text-transform: uppercase; color: rgba(255,255,255,.6); margin-bottom: 14px;
-    }
-    .hero h1 {
-      font-size: clamp(22px,4vw,34px); font-weight: 800;
-      line-height: 1.18; margin-bottom: 10px;
-    }
-    .hero .sub { font-size: 15px; color: rgba(255,255,255,.75); margin-bottom: 36px; }
-    .chips { display: flex; flex-wrap: wrap; gap: 10px; }
-    .chip {
-      display: inline-flex; align-items: center; gap: 7px;
-      background: rgba(255,255,255,.14);
-      border: 1px solid rgba(255,255,255,.22);
-      border-radius: 20px; padding: 7px 14px;
-      font-size: 13px; font-weight: 500;
-      backdrop-filter: blur(4px);
-    }
-    .chip.url {
-      font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
-      cursor: pointer; transition: background .15s;
-    }
-    .chip.url:hover { background: rgba(255,255,255,.28); }
 
-    /* ── MAIN ────────────────────────────────── */
-    .main  { max-width: 1120px; margin: 0 auto; padding: 48px 24px 96px; }
-    .section { margin-bottom: 72px; }
-
-    /* Section header */
-    .sec-hd  { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
-    .sec-ico {
-      width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center; font-size: 20px;
-    }
-    .ic-blue   { background: var(--blue-light); }
-    .ic-green  { background: var(--green-light); }
-    .ic-yellow { background: var(--yellow-light); }
-    .sec-title { font-size: 21px; font-weight: 700; }
-    .sec-sub   { font-size: 13px; color: var(--t2); margin-top: 3px; }
-
-    /* ── DIAGRAM CARD ────────────────────────── */
-    .diag-card {
-      background: var(--s0); border: 1px solid var(--bd);
-      border-radius: var(--r3); box-shadow: var(--sh2); overflow: hidden;
-    }
-    .diag-toolbar {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 18px; border-bottom: 1px solid var(--bd); background: var(--s1);
-    }
-    .diag-label { font-size: 13px; font-weight: 600; color: var(--t2); }
-    .diag-btns  { display: flex; gap: 6px; }
-    .btn {
-      background: var(--s0); border: 1px solid var(--bd); border-radius: var(--r1);
-      padding: 5px 11px; font-size: 12px; font-weight: 500;
-      color: var(--t2); cursor: pointer; transition: all .15s;
-      font-family: inherit;
-    }
-    .btn:hover { background: var(--blue-light); color: var(--blue); border-color: var(--blue); }
-    .diag-scroll {
-      overflow: auto; padding: 28px 24px;
-      max-height: 960px; cursor: grab;
-    }
-    .diag-scroll:active { cursor: grabbing; }
-    .diag-inner {
-      display: inline-block;
-      transform-origin: top left; transition: transform .2s;
-    }
-    .diag-legend {
-      display: flex; flex-wrap: wrap; gap: 12px;
-      padding: 14px 18px; border-top: 1px solid var(--bd); background: var(--s1);
-    }
-    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--t2); }
-    .ld { width: 13px; height: 13px; border-radius: 4px; border: 1.5px solid; }
-
-    /* ── RESOURCES GRID ──────────────────────── */
-    .res-grid {
+    .hero-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 16px;
-    }
-    .res-card {
-      background: var(--s0); border: 1px solid var(--bd);
-      border-radius: var(--r2); padding: 22px; box-shadow: var(--sh1);
-      transition: box-shadow .2s, transform .2s;
-    }
-    .res-card:hover { box-shadow: var(--sh3); transform: translateY(-3px); }
-    .res-ico  { font-size: 30px; margin-bottom: 12px; }
-    .res-name { font-size: 14px; font-weight: 700; margin-bottom: 7px; }
-    .res-desc { font-size: 13px; color: var(--t2); line-height: 1.55; }
-    .res-tag  {
-      display: inline-flex; align-items: center; margin-top: 12px;
-      font-size: 11px; font-weight: 700; padding: 3px 9px;
-      border-radius: 6px; background: var(--blue-light); color: var(--blue);
+      grid-template-columns: 1.35fr 0.65fr;
+      gap: 14px;
     }
 
-    /* ── WORKATO ─────────────────────────────── */
-    .wk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media (max-width: 660px) { .wk-grid { grid-template-columns: 1fr; } }
-    .wk-card { background: var(--s0); border: 1px solid var(--bd); border-radius: var(--r2); overflow: hidden; box-shadow: var(--sh1); }
-    .wk-head { padding: 14px 18px; font-weight: 700; font-size: 13.5px; border-bottom: 1px solid var(--bd); }
-    .wk-head.does   { background: var(--green-light); color: #1b5e20; }
-    .wk-head.doesnt { background: var(--red-light);   color: #b71c1c; }
-    .wk-list { list-style: none; padding: 4px 0; }
-    .wk-list li {
-      display: flex; align-items: flex-start; gap: 10px;
-      padding: 10px 18px; font-size: 13.5px;
-      border-bottom: 1px solid var(--s2);
-    }
-    .wk-list li:last-child { border-bottom: none; }
-    .wk-list li .ico { flex-shrink: 0; font-size: 15px; margin-top: 1px; }
-
-    .contract {
-      margin-top: 20px; background: var(--s0);
-      border: 1px solid var(--bd); border-radius: var(--r2);
-      border-left: 4px solid var(--blue);
-      padding: 20px 24px; box-shadow: var(--sh1);
-    }
-    .contract h4 { font-size: 14px; font-weight: 700; color: var(--blue); margin-bottom: 14px; }
-    .ctr-row { display: flex; gap: 14px; margin-bottom: 10px; font-size: 13.5px; }
-    .ctr-row:last-child { margin-bottom: 0; }
-    .ctr-lbl { font-weight: 700; min-width: 130px; flex-shrink: 0; }
-    .ctr-val { color: var(--t2); }
-
-    /* ── COSTS ───────────────────────────────── */
-    .cost-wrap { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
-    @media (max-width: 820px) { .cost-wrap { grid-template-columns: 1fr; } }
-    .tbl-scroll { overflow-x: auto; border-radius: var(--r2); box-shadow: var(--sh1); }
-    table.ctbl {
-      width: 100%; border-collapse: collapse; font-size: 13.5px;
-      background: var(--s0); border-radius: var(--r2); overflow: hidden;
-    }
-    .ctbl th {
-      background: var(--blue); color: #fff; padding: 12px 16px;
-      text-align: left; font-weight: 600; font-size: 11.5px;
-      text-transform: uppercase; letter-spacing: .06em;
-    }
-    .ctbl td { padding: 11px 16px; border-bottom: 1px solid var(--bd); }
-    .ctbl tr:last-child td { border-bottom: none; }
-    .ctbl tr:nth-child(even) td { background: var(--s1); }
-    .ctbl tr.tot td {
-      background: var(--blue-light) !important; font-weight: 700;
-      color: var(--blue-dark); border-top: 2px solid var(--blue);
-    }
-    .cost-pills { display: flex; flex-direction: column; gap: 14px; }
-    .pill {
-      background: var(--s0); border: 1px solid var(--bd);
-      border-radius: var(--r2); padding: 18px 20px; box-shadow: var(--sh1);
-    }
-    .pill.low  { border-left: 4px solid var(--green); }
-    .pill.mid  { border-left: 4px solid var(--yellow); }
-    .pill.high { border-left: 4px solid var(--red); }
-    .pill-lbl  { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--t3); }
-    .pill-price { font-size: 26px; font-weight: 800; color: var(--t1); margin: 5px 0 3px; }
-    .pill-desc  { font-size: 12.5px; color: var(--t2); }
-    .free-tier {
-      background: var(--s0); border: 1px solid var(--bd);
-      border-radius: var(--r2); padding: 16px 18px; box-shadow: var(--sh1);
-    }
-    .free-tier h5 { font-size: 13px; font-weight: 700; color: var(--blue); margin-bottom: 10px; }
-    .free-tier ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
-    .free-tier li { font-size: 12.5px; color: var(--t2); }
-
-    /* ── FEATURES ────────────────────────────── */
-    .feat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
-    .feat-chip {
-      display: flex; align-items: center; gap: 10px;
-      background: var(--s0); border: 1px solid var(--bd);
-      border-radius: 10px; padding: 13px 15px;
-      font-size: 13px; font-weight: 500; box-shadow: var(--sh1);
-    }
-    .ck { color: var(--green); font-size: 16px; }
-    .tech-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
-    .ttag {
-      background: var(--s2); color: var(--t2);
-      border-radius: 6px; padding: 5px 12px;
-      font-size: 12px; font-weight: 500;
-      font-family: 'JetBrains Mono', monospace;
+    .hero-main {
+      background: linear-gradient(150deg, rgba(90, 157, 255, 0.2), rgba(79, 215, 255, 0.08) 45%, rgba(255, 95, 109, 0.08));
+      border: 1px solid rgba(79, 215, 255, 0.28);
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      box-shadow: var(--shadow);
     }
 
-    /* ── UTILS ───────────────────────────────── */
-    code {
-      font-family: 'JetBrains Mono', monospace; font-size: .855em;
-      background: var(--s2); border-radius: 4px; padding: 1px 5px;
+    .hero-kpis {
+      display: grid;
+      gap: 12px;
     }
-    .fade-in { opacity: 0; transform: translateY(18px); transition: opacity .45s ease, transform .45s ease; }
-    .fade-in.vis { opacity: 1; transform: none; }
 
-    /* ── TOAST ───────────────────────────────── */
-    .toast {
-      position: fixed; bottom: 24px; right: 24px;
-      background: var(--t1); color: #fff; padding: 12px 20px;
-      border-radius: 10px; font-size: 13px; font-weight: 500;
-      box-shadow: var(--sh3); z-index: 999;
-      opacity: 0; transform: translateY(8px);
-      transition: all .2s; pointer-events: none;
+    .kpi {
+      background: var(--card);
+      border: 1px solid rgba(90, 157, 255, 0.28);
+      border-radius: var(--radius-md);
+      padding: 15px;
+      box-shadow: var(--shadow);
     }
-    .toast.show { opacity: 1; transform: none; }
 
-    /* ── FOOTER ──────────────────────────────── */
-    footer {
-      border-top: 1px solid var(--bd); background: var(--s0);
-      padding: 22px 28px; text-align: center;
-      font-size: 13px; color: var(--t3);
+    .kpi-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
     }
-    footer a { color: var(--blue); text-decoration: none; }
-    footer a:hover { text-decoration: underline; }
 
-    @media (max-width: 600px) {
-      .nav-links a { padding: 6px 10px; font-size: 12px; }
-      .hero { padding: 40px 20px 36px; }
+    .kpi-value {
+      margin-top: 4px;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1.55rem;
+      color: var(--txt);
+      font-weight: 700;
+    }
+
+    .kpi-note {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--mint);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      font-family: "Space Grotesk", sans-serif;
+    }
+
+    h1 {
+      font-size: clamp(1.42rem, 2.8vw, 2.2rem);
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+
+    .hero-text {
+      max-width: 72ch;
+      margin: 0;
+      color: #cdd8f3;
+    }
+
+    .chips {
+      margin-top: 16px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(79, 215, 255, 0.24);
+      color: #d6eaff;
+      background: rgba(90, 157, 255, 0.14);
+      font-weight: 600;
+    }
+
+    section {
+      margin: 22px 0;
+    }
+
+    .section-head {
+      margin-bottom: 10px;
+    }
+
+    .section-title {
+      font-size: 1.25rem;
+      color: #ecf3ff;
+    }
+
+    .section-sub {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 14px;
+      max-width: 84ch;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      background: var(--card-2);
+      border: 1px solid rgba(79, 215, 255, 0.2);
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .stat b {
+      display: block;
+      color: var(--cyan);
+      font-size: 12px;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .stat span {
+      color: #d8e3ff;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: "Space Grotesk", sans-serif;
+    }
+
+    .grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    }
+
+    .card {
+      background: var(--card-2);
+      border: 1px solid rgba(90, 157, 255, 0.22);
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .card h3 {
+      font-size: 0.98rem;
+      margin-bottom: 6px;
+      color: #f0f4ff;
+    }
+
+    .card p, .card li {
+      margin: 0;
+      color: #b8c6e8;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .card.benefit { border-left: 4px solid var(--mint); }
+    .card.scope { border-left: 4px solid var(--blue); }
+    .card.limit { border-left: 4px solid var(--amber); }
+
+    .flow {
+      display: grid;
+      gap: 8px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 10px;
+      align-items: start;
+      background: #0f1830;
+      border: 1px solid rgba(79, 215, 255, 0.18);
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .step-index {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-family: "Space Grotesk", sans-serif;
+      color: #07142b;
+      background: linear-gradient(145deg, var(--mint), var(--cyan));
+    }
+
+    .step-title {
+      margin: 0;
+      font-size: 14px;
+      color: #eef4ff;
+      font-weight: 700;
+    }
+
+    .step-desc {
+      margin: 2px 0 0;
+      color: #b9c7e8;
+      font-size: 13px;
+    }
+
+    .tools {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    }
+
+    .tool {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #0f1830;
+      border: 1px solid rgba(79, 215, 255, 0.2);
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .tool img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #fff;
+      padding: 5px;
+      flex-shrink: 0;
+    }
+
+    .tool b {
+      display: block;
+      color: #eff5ff;
+      font-size: 14px;
+    }
+
+    .tool span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .month {
+      background: #0f1830;
+      border: 1px solid rgba(90, 157, 255, 0.26);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .month .m {
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .month h3 {
+      font-size: 15px;
+      margin-bottom: 4px;
+      color: #eef4ff;
+    }
+
+    .month p {
+      margin: 0;
+      color: #b9c7e8;
+      font-size: 13px;
+    }
+
+    .risk {
+      border-left: 4px solid var(--red);
+    }
+
+    .fade {
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 0.45s ease, transform 0.45s ease;
+    }
+
+    .fade.show {
+      opacity: 1;
+      transform: none;
+    }
+
+    .foot {
+      margin: 28px 0 34px;
+      color: #90a2ca;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 930px) {
+      .hero-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-
-<!-- ═══════════════════════════════════ NAV ══════════════════════════════════ -->
-<header class="nav">
-  <a href="#top" class="nav-logo">
-    ☁️ Sistema Facturas <span class="badge">GCP</span>
-  </a>
-  <nav class="nav-links">
-    <a href="#flujo">Flujo</a>
-    <a href="#recursos">Recursos GCP</a>
-    <a href="#workato">Workato</a>
-    <a href="#costos">Costos</a>
-    <a href="#resumen">Resumen</a>
-  </nav>
-</header>
-
-<!-- ═══════════════════════════════════ HERO ═════════════════════════════════ -->
-<section class="hero" id="top">
-  <div class="hero-inner">
-    <div class="hero-eyebrow">Alupar · La Virgen · Proyecto 2 · Mayo 2026</div>
-    <h1>Sistema de Automatización<br>de Facturas PDF/XML</h1>
-    <p class="sub">Arquitectura técnica y flujo operativo completo</p>
-    <div class="chips">
-      <span class="chip">📦 Node.js 20 · TypeScript</span>
-      <span class="chip">🚀 Cloud Run · serverless</span>
-      <span class="chip">🧠 Document AI</span>
-      <span class="chip">🔥 Firestore</span>
-      <span class="chip url" onclick="copyUrl()" title="Click para copiar URL">
-        🔗 proyecto2-facturas-lanrfivtaq-uc.a.run.app
-      </span>
+  <header class="top">
+    <div class="wrap top-in">
+      <a class="brand" href="#inicio">SISTEMA AUTOMATIZADO DE FACTURAS
+        <span class="tag-live"><span class="dot"></span>Resumen ejecutivo</span>
+      </a>
+      <nav class="menu">
+        <a href="#login">Login</a>
+        <a href="#beneficios">Beneficios</a>
+        <a href="#alcance">Alcance</a>
+        <a href="#flujo">Flujo</a>
+        <a href="#prevalidacion-coes">Prevalidacion COES</a>
+        <a href="#carga-masiva">Carga masiva</a>
+        <a href="#correos">Correos</a>
+        <a href="#herramientas">Herramientas</a>
+        <a href="#cronograma">Cronograma</a>
+      </nav>
     </div>
-  </div>
-</section>
+  </header>
 
-<!-- ═══════════════════════════════════ MAIN ═════════════════════════════════ -->
-<main class="main">
+  <main class="wrap" id="inicio">
+    <section class="hero fade">
+      <div class="hero-grid">
+        <article class="hero-main">
+          <p class="eyebrow">Propuesta tecnica | Alupar - La Virgen</p>
+          <h1>Revision y clasificacion automatizada de facturas en tiempo real</h1>
+          <p class="hero-text">
+            Esta pagina resume el alcance del proyecto usando solo la informacion de la propuesta tecnica:
+            capturar facturas desde Outlook, extraer datos clave, validar en SUNAT y mostrar todo en un
+            panel central para una gestion mas rapida y trazable.
+          </p>
+          <div class="chips">
+            <span class="chip">Login de acceso a plataforma</span>
+            <span class="chip">Outlook + Workato</span>
+            <span class="chip">XML UBL 2.1 + ZIP + PDF</span>
+            <span class="chip">Google Cloud + Firestore</span>
+            <span class="chip">Panel web en tiempo real</span>
+            <span class="chip">Prevalidacion de montos con COES</span>
+            <span class="chip">Carga masiva por carpetas</span>
+            <span class="chip">Vista previa de correos</span>
+          </div>
+        </article>
 
-  <!-- ─── FLUJO ─────────────────────────────────────────────────────────── -->
-  <section class="section fade-in" id="flujo">
-    <div class="sec-hd">
-      <div class="sec-ico ic-blue">🔀</div>
-      <div>
-        <div class="sec-title">Flujo de procesamiento completo</div>
-        <div class="sec-sub">Desde que Workato / Postman envía la petición hasta la persistencia en Firestore o JSON local</div>
+        <aside class="hero-kpis">
+          <div class="kpi">
+            <p class="kpi-label">Plazo de ejecucion</p>
+            <p class="kpi-value">4 semanas</p>
+            <p class="kpi-note">Segun cronograma de 6 etapas</p>
+          </div>
+          <div class="kpi">
+            <p class="kpi-label">Esfuerzo estimado</p>
+            <p class="kpi-value">34 horas</p>
+            <p class="kpi-note">Incluye desarrollo, pruebas y capacitacion</p>
+          </div>
+          <div class="kpi">
+            <p class="kpi-label">Inversion estimada</p>
+            <p class="kpi-value">USD 1,700</p>
+            <p class="kpi-note">Tarifa de USD 50/hora</p>
+          </div>
+        </aside>
       </div>
-    </div>
+    </section>
 
-    <div class="diag-card">
-      <div class="diag-toolbar">
-        <div class="diag-label">📊 POST /api/intake · routes.ts</div>
-        <div class="diag-btns">
-          <button class="btn" onclick="zoomIn()">＋ Zoom</button>
-          <button class="btn" onclick="zoomOut()">－ Zoom</button>
-          <button class="btn" onclick="zoomReset()">↺ Reset</button>
-        </div>
-      </div>
-
-      <div class="diag-scroll" id="dScroll">
-        <div class="diag-inner" id="dInner">
-<div class="mermaid">
-%%{init:{"theme":"base","themeVariables":{"primaryColor":"#E8F0FE","primaryTextColor":"#202124","primaryBorderColor":"#1A73E8","lineColor":"#5F6368","secondaryColor":"#E6F4EA","tertiaryColor":"#FEF7E0","fontSize":"13px","fontFamily":"Inter, sans-serif"}}}%%
-flowchart TD
-    subgraph ORIGEN["📬 Origen de la petición"]
-        W([Workato\nPOST multipart/form-data])
-        P([Postman\nPOST multipart/form-data])
-    end
-
-    W --> INTAKE
-    P --> INTAKE
-
-    INTAKE["POST /api/intake\nroutes.ts · multer carga archivos en RAM"]
-
-    INTAKE --> AUTH{¿WORKATO_SHARED_SECRET\nconfigurado?}
-    AUTH -- Sí --> CHECK_TOKEN{¿Header\nx-workato-secret\ncorrecto?}
-    CHECK_TOKEN -- No --> R401([401 No autorizado])
-    CHECK_TOKEN -- Sí --> LOOP
-    AUTH -- No --> LOOP
-
-    LOOP["Por cada archivo recibido"]
-
-    LOOP --> DETECT["detectFileType\nextensión + MIME type"]
-    DETECT --> FTYPE{Tipo detectado}
-    FTYPE -- unknown --> REJ["rejected++\nsalta al siguiente"]
-    FTYPE -- pdf / xml --> HASH["createSha256 del buffer\ncalcula hash del contenido"]
-
-    HASH --> DEDUP{¿Hash ya existe\nen base de datos?}
-    DEDUP -- Sí --> SKIP["Devuelve documento existente\nsin reprocesar"]
-    DEDUP -- No --> SAVE_FILE
-
-    SAVE_FILE{Guardar archivo original}
-
-    subgraph LOCAL_ENV["💻 LOCAL  STORAGE_MODE=local"]
-        LS["Escribe en\nstorage/raw/&lt;requestId&gt;/archivo"]
-    end
-
-    subgraph GCP_ENV["☁️ GCP  STORAGE_MODE=gcp"]
-        GS["Sube a\ngs://bucket-raw/raw/&lt;requestId&gt;/archivo"]
-    end
-
-    SAVE_FILE --> LOCAL_ENV
-    SAVE_FILE --> GCP_ENV
-    LOCAL_ENV --> EXTRACT
-    GCP_ENV --> EXTRACT
-
-    EXTRACT{Extraer campos\nextractFields}
-
-    subgraph LOCAL_PDF["LOCAL · PDF"]
-        LP["pdf-parse → texto plano\nRegex: número, fechas, monto"]
-    end
-    subgraph LOCAL_XML["LOCAL · XML"]
-        LX["xml2js parsea nodos\nID, IssueDate, PayableAmount..."]
-    end
-    subgraph GCP_PDF["GCP · PDF"]
-        GP["Document AI\nprocessor/5624412ac0f58ebf\nentidades estructuradas reales"]
-    end
-    subgraph GCP_XML["GCP · XML"]
-        GX["xml2js parsea nodos\nigual que local"]
-    end
-
-    EXTRACT -- "local + pdf" --> LOCAL_PDF
-    EXTRACT -- "local + xml" --> LOCAL_XML
-    EXTRACT -- "gcp + pdf"   --> GCP_PDF
-    EXTRACT -- "gcp + xml"   --> GCP_XML
-
-    LOCAL_PDF --> CLASSIFY
-    LOCAL_XML --> CLASSIFY
-    GCP_PDF   --> CLASSIFY
-    GCP_XML   --> CLASSIFY
-
-    CLASSIFY["classifyDocument\nfactura · comprobante · nota · desconocido"]
-    CLASSIFY --> CONCEPT["inferConcept\npeaje · energía · transporte · otros"]
-    CONCEPT  --> PERSIST{Persistir documento}
-
-    subgraph LOCAL_DB["💾 LOCAL  DB_MODE=local"]
-        LDB["Lee y escribe\ndata/documents.json"]
-    end
-    subgraph GCP_DB["🔥 GCP  DB_MODE=firestore"]
-        FDB["Escribe documento\nen colección Firestore 'documents'"]
-    end
-
-    PERSIST --> LOCAL_DB
-    PERSIST --> GCP_DB
-    LOCAL_DB --> RESP
-    GCP_DB   --> RESP
-
-    RESP["202 Accepted\nrequestId · accepted · rejected · documents"]
-
-    style LOCAL_ENV  fill:#e6f4ea,stroke:#34a853,stroke-width:2px
-    style LOCAL_PDF  fill:#e6f4ea,stroke:#34a853,stroke-width:1.5px
-    style LOCAL_XML  fill:#e6f4ea,stroke:#34a853,stroke-width:1.5px
-    style LOCAL_DB   fill:#e6f4ea,stroke:#34a853,stroke-width:1.5px
-    style GCP_ENV    fill:#e8f0fe,stroke:#1a73e8,stroke-width:2px
-    style GCP_PDF    fill:#e8f0fe,stroke:#1a73e8,stroke-width:1.5px
-    style GCP_XML    fill:#e8f0fe,stroke:#1a73e8,stroke-width:1.5px
-    style GCP_DB     fill:#e8f0fe,stroke:#1a73e8,stroke-width:1.5px
-    style R401       fill:#fce8e6,stroke:#ea4335,stroke-width:2px
-    style ORIGEN     fill:#fff8e1,stroke:#fbbc04,stroke-width:2px
-    style RESP       fill:#e6f4ea,stroke:#34a853,stroke-width:2px
-</div>
-        </div>
-      </div>
-
-      <div class="diag-legend">
-        <div class="legend-item"><div class="ld" style="background:#e6f4ea;border-color:#34a853"></div>Entorno LOCAL</div>
-        <div class="legend-item"><div class="ld" style="background:#e8f0fe;border-color:#1a73e8"></div>Entorno GCP (Cloud Run)</div>
-        <div class="legend-item"><div class="ld" style="background:#fce8e6;border-color:#ea4335"></div>Error / Rechazado</div>
-        <div class="legend-item"><div class="ld" style="background:#fff8e1;border-color:#fbbc04"></div>Origen de la petición</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── RECURSOS GCP ──────────────────────────────────────────────────── -->
-  <section class="section fade-in" id="recursos">
-    <div class="sec-hd">
-      <div class="sec-ico ic-blue">☁️</div>
-      <div>
-        <div class="sec-title">Recursos GCP utilizados</div>
-        <div class="sec-sub">Proyecto <code>invoice-automation-497420</code> · región <code>us-central1</code></div>
-      </div>
-    </div>
-
-    <div class="res-grid">
-      <div class="res-card">
-        <div class="res-ico">🚀</div>
-        <div class="res-name">Cloud Run</div>
-        <div class="res-desc">Servidor principal. Corre la API Node.js y el dashboard web. Escala a cero instancias cuando no hay tráfico — solo se cobra por requests procesados.</div>
-        <span class="res-tag">Serverless</span>
-      </div>
-      <div class="res-card">
-        <div class="res-ico">🔨</div>
-        <div class="res-name">Cloud Build</div>
-        <div class="res-desc">Compila y empaqueta la imagen Docker en cada deploy. Se activa desde <code>deploy-cloudrun.ps1</code>. 120 min/día de build son gratuitos.</div>
-        <span class="res-tag">CI / CD</span>
-      </div>
-      <div class="res-card">
-        <div class="res-ico">📦</div>
-        <div class="res-name">Container Registry</div>
-        <div class="res-desc">Almacena la imagen Docker del servicio. Imagen de ≈ 200 MB basada en <code>node:20-slim</code>. Referenciada en cada re-deploy.</div>
-        <span class="res-tag">Registry</span>
-      </div>
-      <div class="res-card">
-        <div class="res-ico">🗄️</div>
-        <div class="res-name">Cloud Storage</div>
-        <div class="res-desc">
-          Dos buckets:<br>
-          <code>…-raw</code> → PDFs/XMLs originales por request<br>
-          <code>…-exports</code> → ZIPs generados por concepto
-        </div>
-        <span class="res-tag">Almacenamiento</span>
-      </div>
-      <div class="res-card">
-        <div class="res-ico">🔥</div>
-        <div class="res-name">Firestore</div>
-        <div class="res-desc">Base de datos NoSQL. Colección <code>documents</code> alimenta el dashboard en tiempo real via <code>GET /api/documents</code>. Modo <code>DB_MODE=firestore</code>.</div>
-        <span class="res-tag">Base de datos</span>
-      </div>
-      <div class="res-card">
-        <div class="res-ico">🧠</div>
-        <div class="res-name">Document AI</div>
-        <div class="res-desc">Extrae campos estructurados de PDFs: número, fecha, monto, emisor. Processor ID <code>5624412ac0f58ebf</code>, tipo <code>INVOICE_PROCESSOR</code>, ubicación <code>us</code>.</div>
-        <span class="res-tag">AI / ML</span>
-      </div>
-      <div class="res-card">
-        <div class="res-ico">🔑</div>
-        <div class="res-name">IAM · Service Account</div>
-        <div class="res-desc">SA <code>facturas-sa</code> con roles mínimos: <code>Storage Object Admin</code>, <code>Datastore User</code>, <code>Document AI Editor</code>. Sin credenciales hardcodeadas.</div>
-        <span class="res-tag">Seguridad</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── WORKATO ────────────────────────────────────────────────────────── -->
-  <section class="section fade-in" id="workato">
-    <div class="sec-hd">
-      <div class="sec-ico ic-yellow">⚙️</div>
-      <div>
-        <div class="sec-title">Rol de Workato en el flujo</div>
-        <div class="sec-sub">Workato actúa como capa de captura y enrutamiento — no procesa ni interpreta documentos</div>
-      </div>
-    </div>
-
-    <div class="wk-grid">
-      <div class="wk-card">
-        <div class="wk-head does">✅ Lo que hace Workato</div>
-        <ul class="wk-list">
-          <li><span class="ico">📧</span>Monitorea el buzón de correo (Outlook / Gmail) en forma continua.</li>
-          <li><span class="ico">📎</span>Detecta correos con adjuntos PDF o XML.</li>
-          <li><span class="ico">🔍</span>Filtra por remitente, tamaño, extensión y lista de permitidos.</li>
-          <li><span class="ico">⬇️</span>Descarga el adjunto en binario (bytes, no base64).</li>
-          <li><span class="ico">📤</span>Envía <code>multipart/form-data</code> a <code>POST /api/intake</code> con archivos en campo <code>files</code>, metadatos del correo (<code>messageId</code>, <code>sender</code>, <code>subject</code>, <code>receivedAt</code>) y header <code>x-workato-secret</code>.</li>
-          <li><span class="ico">🔄</span>Gestiona reintentos automáticos ante errores de red.</li>
-          <li><span class="ico">🔔</span>Envía alertas ante fallos reiterados.</li>
-        </ul>
-      </div>
-
-      <div class="wk-card">
-        <div class="wk-head doesnt">❌ Lo que Workato NO hace</div>
-        <ul class="wk-list">
-          <li><span class="ico">🚫</span>Leer ni interpretar el contenido del PDF/XML.</li>
-          <li><span class="ico">🚫</span>Clasificar tipo de documento (factura, comprobante, nota).</li>
-          <li><span class="ico">🚫</span>Extraer campos: número, monto, fecha, emisor.</li>
-          <li><span class="ico">🚫</span>Guardar datos en base de datos.</li>
-          <li><span class="ico">🚫</span>Generar ZIPs ni reportes exportables.</li>
-          <li><span class="ico">🚫</span>Deduplicar documentos ya procesados.</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="contract">
-      <h4>📄 Contrato entre Workato y GCP</h4>
-      <div class="ctr-row">
-        <div class="ctr-lbl">Workato envía:</div>
-        <div class="ctr-val">Archivo binario + metadatos del correo (remitente, asunto, fecha de recepción, messageId)</div>
-      </div>
-      <div class="ctr-row">
-        <div class="ctr-lbl">GCP responde:</div>
-        <div class="ctr-val"><code>202 Accepted</code> con <code>{ requestId, accepted, rejected, documents[] }</code> — incluyendo campos extraídos, tipo documental y concepto inferido</div>
-      </div>
-      <div class="ctr-row">
-        <div class="ctr-lbl">Idempotencia:</div>
-        <div class="ctr-val">El hash SHA-256 del contenido del archivo evita reprocesar duplicados aunque Workato reintente el envío múltiples veces</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── COSTOS ─────────────────────────────────────────────────────────── -->
-  <section class="section fade-in" id="costos">
-    <div class="sec-hd">
-      <div class="sec-ico ic-green">💰</div>
-      <div>
-        <div class="sec-title">Costos estimados GCP</div>
-        <div class="sec-sub">Precios referenciales · región us-central1 · mayo 2026 · Document AI domina el costo variable</div>
-      </div>
-    </div>
-
-    <div class="cost-wrap">
-      <div>
-        <div class="tbl-scroll">
-          <table class="ctbl">
-            <thead>
-              <tr>
-                <th>Servicio</th>
-                <th>USD / mes</th>
-                <th>Base del cálculo</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td><strong>Cloud Run</strong></td><td>$0 – $15</td><td>~500 req/día · 512 MB RAM · escala a 0</td></tr>
-              <tr><td><strong>Cloud Build</strong></td><td>$0 – $5</td><td>120 min/día gratis · builds ocasionales</td></tr>
-              <tr><td><strong>Container Registry</strong></td><td>$1 – $3</td><td>Imagen ~200 MB almacenada</td></tr>
-              <tr><td><strong>Cloud Storage</strong></td><td>$2 – $10</td><td>5–50 GB PDFs/XMLs/ZIPs</td></tr>
-              <tr><td><strong>Firestore</strong></td><td>$1 – $15</td><td>10k escrituras + 50k lecturas/día</td></tr>
-              <tr><td><strong>Document AI ⚠️</strong></td><td>$15 – $60</td><td>500–2000 págs/mes · $0.03/pág · 1000 gratis</td></tr>
-              <tr class="tot"><td><strong>Total estimado</strong></td><td><strong>$20 – $108</strong></td><td>Operación normal mensual</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p style="margin-top:10px;font-size:12px;color:var(--t3)">
-          ⚠️ Document AI: primeras 1,000 páginas/mes son gratis (Free Tier). El costo escala linealmente con el volumen.
+    <section class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Que mejora para la operacion</h2>
+        <p class="section-sub">
+          El proceso pasa de revisar correos manualmente a validar decisiones en un panel unico, con trazabilidad y menos reproceso.
         </p>
       </div>
-
-      <div class="cost-pills">
-        <div class="pill low">
-          <div class="pill-lbl">🟢 Escenario bajo</div>
-          <div class="pill-price">~$20/mes</div>
-          <div class="pill-desc">Menos de 500 páginas/mes procesadas</div>
-        </div>
-        <div class="pill mid">
-          <div class="pill-lbl">🟡 Escenario medio</div>
-          <div class="pill-price">~$50/mes</div>
-          <div class="pill-desc">500 – 2,000 páginas/mes procesadas</div>
-        </div>
-        <div class="pill high">
-          <div class="pill-lbl">🔴 Escenario alto</div>
-          <div class="pill-price">~$100+/mes</div>
-          <div class="pill-desc">Más de 2,000 páginas/mes procesadas</div>
-        </div>
-        <div class="free-tier">
-          <h5>☁️ Free Tier aplicable</h5>
-          <ul>
-            <li>✓ Cloud Run: 2M req/mes</li>
-            <li>✓ Firestore: 1 GB almacenamiento</li>
-            <li>✓ Document AI: 1,000 págs/mes</li>
-            <li>✓ Cloud Build: 120 min/día</li>
-          </ul>
-        </div>
+      <div class="panel stats-row">
+        <div class="stat"><b>Tiempo por factura</b><span>de 2 min a menos de 1 min</span></div>
+        <div class="stat"><b>Precision</b><span>menos errores de transcripcion</span></div>
+        <div class="stat"><b>Visibilidad</b><span>documentos pendientes en un solo lugar</span></div>
+        <div class="stat"><b>Trazabilidad</b><span>quien, cuando y a que equipo</span></div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ─── RESUMEN ────────────────────────────────────────────────────────── -->
-  <section class="section fade-in" id="resumen">
-    <div class="sec-hd">
-      <div class="sec-ico ic-green">✨</div>
-      <div>
-        <div class="sec-title">Resumen de la solución</div>
-        <div class="sec-sub">Capacidades habilitadas y stack técnico completo</div>
+    <section id="beneficios" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Beneficios detallados</h2>
+        <p class="section-sub">Beneficios operacionales declarados en la propuesta tecnica.</p>
       </div>
-    </div>
+      <div class="panel grid">
+        <article class="card benefit">
+          <h3>Productividad del equipo</h3>
+          <p>La persona responsable dedica menos tiempo a tareas repetitivas y mas a validacion y seguimiento.</p>
+        </article>
+        <article class="card benefit">
+          <h3>Precision mejorada</h3>
+          <p>La clasificacion automatica reduce errores manuales y acelera correcciones.</p>
+        </article>
+        <article class="card benefit">
+          <h3>Visibilidad centralizada</h3>
+          <p>Todas las facturas y comprobantes se visualizan en un tablero unico.</p>
+        </article>
+        <article class="card benefit">
+          <h3>Escalabilidad</h3>
+          <p>Si sube el volumen de documentos, la operacion mantiene continuidad.</p>
+        </article>
+      </div>
+    </section>
 
-    <div class="feat-grid">
-      <div class="feat-chip"><span class="ck">✅</span>Clasificación automática de documentos</div>
-      <div class="feat-chip"><span class="ck">✅</span>Extracción de campos clave con Document AI</div>
-      <div class="feat-chip"><span class="ck">✅</span>Dashboard por pestañas (Facturas · Notas)</div>
-      <div class="feat-chip"><span class="ck">✅</span>Exportación ZIP por concepto contable</div>
-      <div class="feat-chip"><span class="ck">✅</span>Deduplicación por hash SHA-256</div>
-      <div class="feat-chip"><span class="ck">✅</span>Trazabilidad de estado por documento</div>
-      <div class="feat-chip"><span class="ck">✅</span>Soporte PDF y XML en el mismo flujo</div>
-      <div class="feat-chip"><span class="ck">✅</span>Autenticación con shared secret</div>
-      <div class="feat-chip"><span class="ck">✅</span>Modo LOCAL y GCP por env vars</div>
-      <div class="feat-chip"><span class="ck">✅</span>Escala a cero — Cloud Run serverless</div>
-    </div>
+    <section id="login" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Login de ingreso a la plataforma</h2>
+        <p class="section-sub">Se plantea un acceso con credenciales para ingresar al panel y operar sobre los documentos.</p>
+      </div>
+      <div class="panel grid">
+        <article class="card scope">
+          <h3>Acceso autenticado</h3>
+          <p>Ingreso mediante login para controlar el acceso al sistema.</p>
+        </article>
+        <article class="card scope">
+          <h3>Sesiones por usuario</h3>
+          <p>Cada usuario accede con su cuenta para mantener trazabilidad de acciones.</p>
+        </article>
+      </div>
+    </section>
 
-    <div class="tech-row">
-      <span class="ttag">Node.js 20</span>
-      <span class="ttag">TypeScript 5.8</span>
-      <span class="ttag">Express 4</span>
-      <span class="ttag">Multer</span>
-      <span class="ttag">Cloud Run</span>
-      <span class="ttag">Cloud Build</span>
-      <span class="ttag">Cloud Storage</span>
-      <span class="ttag">Firestore</span>
-      <span class="ttag">Document AI</span>
-      <span class="ttag">Docker</span>
-      <span class="ttag">pdf-parse</span>
-      <span class="ttag">xml2js</span>
-      <span class="ttag">archiver</span>
-      <span class="ttag">Workato</span>
-    </div>
-  </section>
+    <section id="alcance" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Alcance del proyecto (incluye)</h2>
+        <p class="section-sub">Resumen del alcance funcional y tecnico definido en el MD.</p>
+      </div>
+      <div class="panel grid">
+        <article class="card scope">
+          <h3>Levantamiento funcional inicial</h3>
+          <p>Mapeo de flujo actual, empresas, reglas de clasificacion y departamentos responsables.</p>
+        </article>
+        <article class="card scope">
+          <h3>Configuracion de Workato</h3>
+          <p>Escucha activa en Outlook, filtros de captura y extraccion de metadatos de correo.</p>
+        </article>
+        <article class="card scope">
+          <h3>Implementacion en Google Cloud</h3>
+          <p>Base de datos, procesamiento de XML/PDF/ZIP, validacion SUNAT y almacenamiento seguro.</p>
+        </article>
+        <article class="card scope">
+          <h3>Panel web de usuario</h3>
+          <p>Filtros, busqueda, detalle de documentos, edicion manual y registro de derivaciones.</p>
+        </article>
+        <article class="card scope">
+          <h3>Pruebas y ajustes</h3>
+          <p>Pruebas con historico de correos y ajuste de reglas para reducir falsos positivos.</p>
+        </article>
+        <article class="card scope">
+          <h3>Documentacion y capacitacion</h3>
+          <p>Guia de uso, procedimiento de mantenimiento y sesion inicial de entrenamiento.</p>
+        </article>
+      </div>
+    </section>
 
-</main>
+    <section class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Fuera de alcance (esta propuesta)</h2>
+        <p class="section-sub">Elementos que se cotizan aparte o en fases posteriores.</p>
+      </div>
+      <div class="panel grid">
+        <article class="card limit"><h3>Integracion ERP adicional</h3><p>Sistemas contables no definidos se evaluan como ampliacion.</p></article>
+        <article class="card limit"><h3>OCR de imagenes escaneadas</h3><p>No incluido para documentos sin capa de texto digital.</p></article>
+        <article class="card limit"><h3>Cambios de infraestructura Outlook</h3><p>La propuesta asume acceso al entorno actual del cliente.</p></article>
+        <article class="card limit"><h3>Canales distintos a correo</h3><p>No incluye ingestion por WhatsApp o Telegram.</p></article>
+      </div>
+    </section>
 
-<footer>
-  Sistema de Automatización de Facturas · Alupar | La Virgen · Mayo 2026 ·
-  <a href="https://proyecto2-facturas-lanrfivtaq-uc.a.run.app/api/health" target="_blank" rel="noopener">
-    Cloud Run ↗
-  </a>
-</footer>
+    <section id="flujo" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Flujo operativo explicado simple</h2>
+        <p class="section-sub">Secuencia completa desde el correo entrante hasta la decision de derivacion.</p>
+      </div>
+      <div class="panel flow">
+        <article class="step"><div class="step-index">1</div><div><p class="step-title">Llega el correo a Outlook</p><p class="step-desc">Workato monitorea en forma continua.</p></div></article>
+        <article class="step"><div class="step-index">2</div><div><p class="step-title">Workato filtra y envia</p><p class="step-desc">Se detectan adjuntos relevantes y se envian a la nube.</p></div></article>
+        <article class="step"><div class="step-index">3</div><div><p class="step-title">Se identifica el tipo de archivo</p><p class="step-desc">Soporta XML UBL 2.1, ZIP y PDF con texto.</p></div></article>
+        <article class="step"><div class="step-index">4</div><div><p class="step-title">Extraccion de datos clave</p><p class="step-desc">Se obtiene emisor, numero, fecha, monto y tipo documental.</p></div></article>
+        <article class="step"><div class="step-index">5</div><div><p class="step-title">Validacion SUNAT</p><p class="step-desc">Se consulta estado del comprobante y del contribuyente.</p></div></article>
+        <article class="step"><div class="step-index">6</div><div><p class="step-title">Prevalidacion COES</p><p class="step-desc">Se valida el monto reportado en la factura frente a lo estipulado en COES.</p></div></article>
+        <article class="step"><div class="step-index">7</div><div><p class="step-title">Clasificacion automatica</p><p class="step-desc">Se sugiere empresa y departamento responsable.</p></div></article>
+        <article class="step"><div class="step-index">8</div><div><p class="step-title">Registro en base de datos</p><p class="step-desc">Se guarda trazabilidad completa del documento.</p></div></article>
+        <article class="step"><div class="step-index">9</div><div><p class="step-title">Visualizacion en panel</p><p class="step-desc">El usuario revisa, ajusta si aplica y marca derivacion.</p></div></article>
+      </div>
+    </section>
 
-<div class="toast" id="toast"></div>
+    <section id="prevalidacion-coes" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Prevalidacion de COES</h2>
+        <p class="section-sub">Se incorpora una conexion para contrastar montos de factura con lo estipulado en COES antes de la derivacion.</p>
+      </div>
+      <div class="panel grid">
+        <article class="card scope">
+          <h3>Conexion de contraste</h3>
+          <p>El sistema consulta COES y compara los montos reportados en la factura.</p>
+        </article>
+        <article class="card scope">
+          <h3>Control previo</h3>
+          <p>La validacion se ejecuta antes de la clasificacion final del documento.</p>
+        </article>
+      </div>
+    </section>
 
-<script>
-  /* ── Mermaid ─────────────────────────────── */
-  mermaid.initialize({
-    startOnLoad: true,
-    theme: 'base',
-    themeVariables: {
-      fontSize: '13px',
-      fontFamily: 'Inter, -apple-system, sans-serif'
-    },
-    flowchart: { curve: 'basis', padding: 14, useMaxWidth: false }
-  });
+    <section id="carga-masiva" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Carga masiva desde ZIP</h2>
+        <p class="section-sub">Cada carpeta del ZIP se interpreta como un registro independiente y puede incluir XML, PDF y ZIP anidados.</p>
+      </div>
+      <div class="panel grid">
+        <article class="card scope">
+          <h3>ZIP maestro</h3>
+          <p>El usuario selecciona un solo archivo ZIP desde la interfaz y el sistema lo procesa completo.</p>
+        </article>
+        <article class="card scope">
+          <h3>Carpeta = registro</h3>
+          <p>Cada carpeta interna genera un registro nuevo con su propio conjunto de archivos y metadatos.</p>
+        </article>
+        <article class="card scope">
+          <h3>Archivos soportados</h3>
+          <p>Se aceptan XML, PDF y ZIP, manteniendo la misma lógica de ingestión que el flujo normal.</p>
+        </article>
+        <article class="card scope">
+          <h3>Procesamiento iterativo</h3>
+          <p>El backend expande el ZIP, agrupa por carpeta y llama al endpoint de intake para cada grupo.</p>
+        </article>
+      </div>
+    </section>
 
-  /* ── Zoom ────────────────────────────────── */
-  let zoom = 1;
-  const inner = document.getElementById('dInner');
-  const zoomIn    = () => { zoom = Math.min(zoom + .15, 2.6); inner.style.transform = `scale(${zoom})`; };
-  const zoomOut   = () => { zoom = Math.max(zoom - .15, .35); inner.style.transform = `scale(${zoom})`; };
-  const zoomReset = () => { zoom = 1; inner.style.transform = 'scale(1)'; };
+    <section id="correos" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Visualizacion de correos</h2>
+        <p class="section-sub">La plataforma puede mostrar el cuerpo del correo como una ventana desplegable, útil para revisar el contexto original.</p>
+      </div>
+      <div class="panel grid">
+        <article class="card">
+          <h3>Metadatos del mensaje</h3>
+          <p>La plataforma muestra información clave del correo, como remitente, destinatario y fecha de recepción.</p>
+        </article>
+        <article class="card">
+          <h3>Vista previa segura</h3>
+          <p>El correo se podrá visualizar desde la plataforma como vista previa.</p>
+        </article>
+        <article class="card">
+          <h3>Uso operativo</h3>
+          <p>Permite validar el correo original sin salir del tablero ni perder trazabilidad del documento.</p>
+        </article>
+      </div>
+    </section>
 
-  /* Ctrl+scroll to zoom */
-  document.getElementById('dScroll').addEventListener('wheel', e => {
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    e.deltaY < 0 ? zoomIn() : zoomOut();
-  }, { passive: false });
+    <section id="herramientas" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Herramientas del sistema</h2>
+        <p class="section-sub">Aplicaciones mencionadas en la propuesta tecnica y su rol principal.</p>
+      </div>
+      <div class="panel tools">
+        <article class="tool"><img src="img/microsoft.webp" alt="Outlook"><div><b>Outlook</b><span>Canal de entrada de facturas y comprobantes.</span></div></article>
+        <article class="tool"><img src="img/workato.png" alt="Workato"><div><b>Workato</b><span>Escucha activa y orquestacion de captura.</span></div></article>
+        <article class="tool"><img src="img/Google-Cloud.png" alt="Google Cloud"><div><b>Google Cloud</b><span>Procesamiento, escalado y despliegue del sistema.</span></div></article>
+        <article class="tool"><img src="img/firebase.png" alt="Firestore"><div><b>Firestore</b><span>Base de datos de documentos y estados.</span></div></article>
+        <article class="tool"><img src="img/sunat.webp" alt="SUNAT"><div><b>SUNAT</b><span>Validacion fiscal en tiempo real del comprobante.</span></div></article>
+        <article class="tool"><img src="img/google-sheets.webp" alt="Google Sheets"><div><b>Google Sheets</b><span>Exportacion opcional para analisis y respaldo.</span></div></article>
+      </div>
+    </section>
 
-  /* ── Copy URL ────────────────────────────── */
-  function copyUrl() {
-    navigator.clipboard.writeText('https://proyecto2-facturas-lanrfivtaq-uc.a.run.app')
-      .then(() => showToast('URL copiada al portapapeles ✓'));
-  }
-  function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2600);
-  }
+    <section id="cronograma" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Cronograma y costos del proyecto</h2>
+        <p class="section-sub">Datos de esfuerzo, inversion y etapas tomados del MD.</p>
+      </div>
+      <div class="panel timeline">
+        <article class="month"><p class="m">Semana 1</p><h3>Etapa 1</h3><p>Levantamiento y mapeo de referencias (4h).</p></article>
+        <article class="month"><p class="m">Semana 1-2</p><h3>Etapa 2</h3><p>Configuracion de Workato (5h).</p></article>
+        <article class="month"><p class="m">Semana 2-3</p><h3>Etapa 3 y 3b</h3><p>Base de datos, clasificacion e integracion SUNAT (13h).</p></article>
+        <article class="month"><p class="m">Semana 2-3</p><h3>Etapa 4</h3><p>Desarrollo del panel web (7h).</p></article>
+        <article class="month"><p class="m">Semana 3</p><h3>Etapa 5</h3><p>Integracion extremo a extremo (4h).</p></article>
+        <article class="month"><p class="m">Semana 4</p><h3>Etapa 6</h3><p>Pruebas finales y capacitacion (2h).</p></article>
+      </div>
+    </section>
+  </main>
 
-  /* ── Scroll fade-in ──────────────────────── */
-  const io = new IntersectionObserver(entries =>
-    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('vis'); io.unobserve(e.target); } }),
-    { threshold: 0.06 }
-  );
-  document.querySelectorAll('.fade-in').forEach(el => io.observe(el));
+  <script>
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) entry.target.classList.add("show");
+      });
+    }, { threshold: 0.1 });
 
-  /* ── Nav active on scroll ────────────────── */
-  const spy = new IntersectionObserver(entries => {
-    entries.forEach(e => {
-      if (e.isIntersecting) {
-        document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-        const lnk = document.querySelector(`.nav-links a[href="#${e.target.id}"]`);
-        if (lnk) lnk.classList.add('active');
-      }
-    });
-  }, { rootMargin: '-35% 0px -55% 0px' });
-  document.querySelectorAll('section[id]').forEach(s => spy.observe(s));
-</script>
+    document.querySelectorAll(".fade").forEach((el) => io.observe(el));
+  </script>
 </body>
 </html>

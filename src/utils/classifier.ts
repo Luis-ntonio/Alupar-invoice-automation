@@ -16,6 +16,15 @@ function normalizeText(input: string): string {
 }
 
 export function classifyDocument(fields: ExtractedFields): DocumentType {
+  // Clasificación directa por código SUNAT (más confiable que buscar texto)
+  if (fields.tipoDocumento) {
+    const cod = fields.tipoDocumento.trim();
+    if (cod === "01") return "factura";
+    if (cod === "03") return "comprobante";  // Boleta
+    if (cod === "07") return "nota";          // Nota de crédito
+    if (cod === "08") return "nota";          // Nota de débito
+  }
+
   const content = normalizeText(
     [
       fields.rawTextSnippet,

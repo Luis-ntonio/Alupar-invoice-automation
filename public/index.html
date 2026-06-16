@@ -6,95 +6,136 @@
     <title>Dashboard de Facturas</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
-    <div class="bg-layer"></div>
-    <main class="layout">
-      <header class="hero">
-        <p class="hero-kicker">Proyecto2 • Cloud Run</p>
-        <h1>Centro de Procesamiento de Facturas PDF/XML</h1>
-        <p class="hero-subtitle">
-          Visualiza documentos clasificados, filtra por tipo/empresa y exporta en ZIP seleccionando registros.
-        </p>
-      </header>
+    <header class="top">
+      <div class="top-in wrap">
+        <a class="brand" href="#inicio">SISTEMA AUTOMATIZADO DE FACTURAS <span class="tag-live"><span class="dot"></span>Panel operativo</span></a>
+        <nav class="menu">
+          <a href="#dashboard">Dashboard</a>
+          <a href="#documentos">Documentos</a>
+          <a href="#chartPanel">Historicos</a>
+        </nav>
+      </div>
+    </header>
 
-      <section class="panel">
+    <main class="wrap page-shell" id="inicio">
+      <section class="hero" id="dashboard">
+        <div class="hero-grid">
+          <article class="hero-main panel panel-hero">
+            <p class="eyebrow">Proyecto2 | Cloud Run</p>
+            <h1>Centro de procesamiento documental en tiempo real</h1>
+            <p class="hero-subtitle">
+              Visualiza documentos clasificados, valida estados SUNAT, exporta selecciones y ejecuta importaciones masivas desde un ZIP maestro.
+            </p>
+            <div class="hero-actions">
+              <button id="refreshBtn" class="btn-primary">Actualizar panel</button>
+              <button id="massiveImportBtn" class="btn-secondary btn-secondary-bright">Massive import</button>
+              <input id="massiveImportInput" type="file" accept=".zip,application/zip" hidden />
+            </div>
+            <p id="importResult" class="status-line"></p>
+          </article>
+
+          <aside class="hero-kpis">
+            <div class="kpi">
+              <p class="kpi-label">Documentos cargados</p>
+              <p class="kpi-value" id="heroTotalDocs">0</p>
+              <p class="kpi-note">Registros disponibles en el tablero</p>
+            </div>
+            <div class="kpi">
+              <p class="kpi-label">Empresas detectadas</p>
+              <p class="kpi-value" id="heroEmpresas">0</p>
+              <p class="kpi-note">Emisores con al menos un documento</p>
+            </div>
+            <div class="kpi">
+              <p class="kpi-label">Pendientes</p>
+              <p class="kpi-value" id="heroPendientes">0</p>
+              <p class="kpi-note">Registros en revision o por gestionar</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="panel" id="documentos">
         <div class="toolbar">
-          <div class="toolbar-group">
-            <label for="documentType">Tipo</label>
-            <select id="documentType">
-              <option value="">Todos</option>
-              <option value="factura">Factura</option>
-              <option value="comprobante">Comprobante</option>
-              <option value="nota">Nota</option>
-              <option value="desconocido">Desconocido</option>
-            </select>
+          <div class="toolbar-left">
+            <div class="time-filter">
+              <button class="time-btn active" data-period="all">Todo</button>
+              <button class="time-btn" data-period="today">Hoy</button>
+              <button class="time-btn" data-period="week">Última semana</button>
+              <button class="time-btn" data-period="month">Último mes</button>
+            </div>
+            <div class="toolbar-copy">
+              <span class="toolbar-title">Vista documental</span>
+              <span class="toolbar-subtitle">Filtra por tiempo, empresa, concepto o estado.</span>
+            </div>
           </div>
 
-          <div class="toolbar-group">
-            <label for="status">Estado</label>
-            <select id="status">
-              <option value="">Todos</option>
-              <option value="pendiente">Pendiente</option>
-              <option value="procesado">Exportado</option>
-              <option value="error">Error</option>
-            </select>
+          <div class="toolbar-right">
+            <button id="clearFiltersBtn" class="btn-secondary" type="button">Limpiar filtros</button>
+            <button id="exportBtn" class="btn-primary" type="button">Generar ZIP</button>
+            <button id="exportExcelBtn" class="btn-secondary btn-secondary-bright" type="button">Exportar Excel</button>
           </div>
-
-          <div class="toolbar-group">
-            <label for="empresaFilter">Empresa</label>
-            <select id="empresaFilter">
-              <option value="">Todas las empresas</option>
-            </select>
-          </div>
-
-          <button id="refreshBtn">Actualizar</button>
         </div>
 
+        <p id="exportResult" class="status-line status-line-toolbar"></p>
         <div class="cards" id="summary"></div>
 
         <div class="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th class="col-check"><input type="checkbox" id="checkAll" title="Seleccionar todo" /></th>
-                <th>Fecha</th>
-                <th>Empresa</th>
-                <th>RUC</th>
-                <th>Asunto</th>
-                <th>Tipo Doc</th>
-                <th>Concepto</th>
-                <th>Monto</th>
-                <th>Estado</th>
-                <th>Archivos</th>
-              </tr>
+              <tr id="tableHeadRow"></tr>
             </thead>
             <tbody id="documentsBody"></tbody>
           </table>
         </div>
       </section>
 
-      <section class="panel export-panel">
-        <h2>Exportar ZIP</h2>
-        <p class="muted">Selecciona documentos en la tabla y genera el archivo ZIP.</p>
-        <div class="export-form">
-          <button id="selectAllBtn" class="btn-secondary">Seleccionar todos</button>
-          <button id="deselectAllBtn" class="btn-secondary">Deseleccionar todos</button>
-          <button id="exportBtn">Generar ZIP</button>
-        </div>
-        <p id="exportResult" class="muted"></p>
-      </section>
-
       <section class="panel chart-panel" id="chartPanel" style="display:none">
-        <h2>Variación histórica de monto por empresa</h2>
+        <div class="chart-header">
+          <div>
+            <h2>Variación histórica de monto por empresa</h2>
+            <p class="muted chart-subtitle">Comparativo temporal de montos por empresa con una lectura más amplia del periodo filtrado.</p>
+          </div>
+          <div class="chart-filter-dropdown">
+            <button id="chartCompaniesBtn" class="btn-secondary btn-secondary-bright" type="button">Empresas</button>
+            <div id="chartCompaniesMenu" class="chart-filter-menu" hidden>
+              <input id="chartCompaniesSearch" class="chart-filter-search" type="text" placeholder="Buscar empresa..." />
+              <label class="chart-filter-option chart-filter-all">
+                <input id="chartCompaniesAll" type="checkbox" />
+                <span>Seleccionar todo</span>
+              </label>
+              <div id="chartCompaniesList" class="chart-filter-list"></div>
+            </div>
+          </div>
+        </div>
         <div class="chart-wrap">
           <canvas id="montoChart"></canvas>
         </div>
       </section>
     </main>
+
+    <div id="emailPreviewModal" class="email-modal" hidden>
+      <div class="email-modal-backdrop" data-close-email-modal></div>
+      <section class="email-modal-card" role="dialog" aria-modal="true" aria-labelledby="emailPreviewTitle">
+        <div class="email-modal-header">
+          <div>
+            <p class="email-modal-kicker">Vista previa del correo</p>
+            <h2 id="emailPreviewTitle">Correo recibido</h2>
+            <p id="emailPreviewMeta" class="muted email-modal-meta"></p>
+          </div>
+          <button id="closeEmailPreviewBtn" class="btn-secondary btn-secondary-bright" type="button">Cerrar</button>
+        </div>
+        <div class="email-modal-body">
+          <iframe id="emailPreviewFrame" title="Vista previa del correo" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+          <pre id="emailPreviewText" class="email-preview-text" hidden></pre>
+        </div>
+      </section>
+    </div>
 
     <script src="renderer.js"></script>
   </body>

@@ -9,14 +9,22 @@ const pdf_parse_1 = __importDefault(require("pdf-parse"));
 const xml2js_1 = require("xml2js");
 const config_1 = require("../config");
 const documentAi_1 = require("./documentAi");
-function detectFileType(fileName, mimeType) {
+function detectFileType(fileName, mimeType, buffer) {
+    // Magic bytes take priority when available — more reliable than metadata from Workato.
+    // ZIP = PK\x03\x04 (0x504B0304), PDF = %PDF (0x25504446)
+    if (buffer && buffer.length >= 4) {
+        if (buffer[0] === 0x50 && buffer[1] === 0x4B && buffer[2] === 0x03 && buffer[3] === 0x04)
+            return "zip";
+        if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46)
+            return "pdf";
+    }
     const lower = fileName.toLowerCase();
-    if (lower.endsWith(".pdf") || mimeType.includes("pdf")) {
+    if (lower.endsWith(".pdf") || mimeType.includes("pdf"))
         return "pdf";
-    }
-    if (lower.endsWith(".xml") || mimeType.includes("xml") || mimeType.includes("text/plain")) {
+    if (lower.endsWith(".xml") || mimeType.includes("xml") || mimeType.includes("text/plain"))
         return "xml";
-    }
+    if (lower.endsWith(".zip") || mimeType.includes("zip"))
+        return "zip";
     return "unknown";
 }
 async function extractFields(fileType, buffer, mimeType = "") {
@@ -43,24 +51,62 @@ async function extractFromPdf(buffer) {
     };
 }
 async function extractFromXml(buffer) {
-    const xml = buffer.toString("utf-8");
+    // Detectar encoding desde la declaración XML antes de convertir a string.
+    // Los primeros 200 bytes son siempre ASCII (la declaración XML usa solo ASCII).
+    const xmlHeader = buffer.slice(0, 200).toString("ascii");
+    const encodingMatch = xmlHeader.match(/encoding=["']([^"']+)["']/i);
+    const encodingRaw = (encodingMatch?.[1] ?? "utf-8").toLowerCase();
+    // Node.js no reconoce "iso-8859-1" directamente; se usa "latin1" que es equivalente.
+    const nodeEncoding = encodingRaw === "iso-8859-1" || encodingRaw === "iso8859-1" || encodingRaw === "latin-1"
+        ? "latin1"
+        : "utf-8";
+    const xml = buffer.toString(nodeEncoding).replace(/^\uFEFF/, "");
     const parsed = await (0, xml2js_1.parseStringPromise)(xml, { explicitArray: false, mergeAttrs: true, trim: true });
+    // CDR (SUNAT ApplicationResponse) — confirmación de recepción, sin datos financieros
+    if (parsed["ar:ApplicationResponse"] != null) {
+        return { rawTextSnippet: xml.slice(0, 500) };
+    }
+    const document = getBusinessDocument(parsed);
+    const supplierParty = getPath(document, ["cac:AccountingSupplierParty", "cac:Party"]);
+    const firstLine = getFirstDocumentLine(document);
+    const emisor = getStringValue(getPath(supplierParty, ["cac:PartyName", "cbc:Name"])) ??
+        getStringValue(getPath(supplierParty, ["cac:PartyLegalEntity", "cbc:RegistrationName"]));
+    const ruc = getStringValue(getPath(supplierParty, ["cac:PartyIdentification", "cbc:ID"]));
+    const concepto = getStringValue(getPath(firstLine, ["cac:Item", "cbc:Description"]));
+    const monto = parseAmount(getStringValue(getPath(document, ["cac:LegalMonetaryTotal", "cbc:PayableAmount"])) ??
+        getStringValue(getPath(document, ["cac:RequestedMonetaryTotal", "cbc:PayableAmount"])) ??
+        findNodeValue(parsed, ["PayableAmount", "cbc:PayableAmount"]));
     return {
-        numeroDocumento: findNodeValue(parsed, ["ID", "cbc:ID", "numero", "Numero"]),
-        fechaEmision: findNodeValue(parsed, ["IssueDate", "cbc:IssueDate", "fecha_emision", "FechaEmision"]),
-        fechaVencimiento: findNodeValue(parsed, ["DueDate", "cbc:DueDate", "fecha_vencimiento", "FechaVencimiento"]),
+        numeroDocumento: getStringValue(document["cbc:ID"]) ?? findNodeValue(parsed, ["ID", "cbc:ID"]),
+        fechaEmision: getStringValue(document["cbc:IssueDate"]) ?? findNodeValue(parsed, ["IssueDate", "cbc:IssueDate"]),
+        fechaVencimiento: getStringValue(document["cbc:DueDate"]) ?? findNodeValue(parsed, ["DueDate", "cbc:DueDate"]),
         moneda: findNodeValue(parsed, ["DocumentCurrencyCode", "cbc:DocumentCurrencyCode", "moneda"]),
-        monto: parseAmount(findNodeValue(parsed, [
-            "PayableAmount",
-            "cbc:PayableAmount",
-            "LegalMonetaryTotal",
-            "monto_total",
-            "TotalAmount"
-        ])),
-        emisor: findNodeValue(parsed, ["RegistrationName", "cbc:RegistrationName", "emisor", "SupplierParty"]),
+        monto,
+        emisor,
+        ruc,
+        concepto,
+        tipoDocumento: getStringValue(document["cbc:InvoiceTypeCode"]) ??
+            getDocumentTypeFallback(parsed, document) ??
+            findNodeValue(parsed, ["InvoiceTypeCode", "cbc:InvoiceTypeCode"]),
         receptor: findNodeValue(parsed, ["CustomerAssignedAccountID", "receptor", "CustomerParty"]),
         rawTextSnippet: xml.slice(0, 1000)
     };
+}
+function getBusinessDocument(parsed) {
+    const document = parsed["Invoice"] ?? parsed["DebitNote"] ?? parsed;
+    return (document ?? parsed);
+}
+function getFirstDocumentLine(document) {
+    const line = document["cac:InvoiceLine"] ?? document["cac:DebitNoteLine"];
+    return Array.isArray(line) ? line[0] : line;
+}
+function getDocumentTypeFallback(parsed, document) {
+    if (parsed["DebitNote"] != null) {
+        return "08";
+    }
+    return (getStringValue(document["cbc:CreditNoteTypeCode"]) ??
+        getStringValue(document["cbc:DebitNoteTypeCode"]) ??
+        findNodeValue(parsed, ["CreditNoteTypeCode", "cbc:CreditNoteTypeCode", "DebitNoteTypeCode", "cbc:DebitNoteTypeCode"]));
 }
 function matchValue(input, regex, group = 1) {
     const found = input.match(regex);
@@ -73,6 +119,39 @@ function parseAmount(raw) {
     const normalized = raw.replace(/[^\d.,-]/g, "").replace(/\.(?=.*\.)/g, "").replace(",", ".");
     const value = Number(normalized);
     return Number.isFinite(value) ? value : undefined;
+}
+function getPath(obj, path) {
+    let current = obj;
+    for (const key of path) {
+        if (current === null || current === undefined || typeof current !== "object")
+            return undefined;
+        current = current[key];
+    }
+    return current;
+}
+function getStringValue(value) {
+    if (value === null || value === undefined)
+        return undefined;
+    if (Array.isArray(value)) {
+        const values = value
+            .map((item) => getStringValue(item)?.replace(/&#10;|\r?\n/g, " ").trim())
+            .filter((item) => Boolean(item));
+        if (values.length === 0)
+            return undefined;
+        return values.join(" | ");
+    }
+    if (typeof value === "string")
+        return value || undefined;
+    if (typeof value === "number")
+        return String(value);
+    if (typeof value === "object") {
+        const textNode = value._;
+        if (typeof textNode === "string")
+            return textNode || undefined;
+        if (typeof textNode === "number")
+            return String(textNode);
+    }
+    return undefined;
 }
 function findNodeValue(value, keys) {
     const found = recursiveFind(value, new Set(keys));

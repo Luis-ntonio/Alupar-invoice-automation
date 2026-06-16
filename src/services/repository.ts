@@ -69,7 +69,7 @@ class LocalJsonRepository implements RecordRepository {
 }
 
 class FirestoreRepository implements RecordRepository {
-  private readonly firestore = new Firestore();
+  private readonly firestore = new Firestore({ ignoreUndefinedProperties: true });
   private readonly collection = this.firestore.collection(config.firestoreCollection);
 
   async save(record: EmailRecord): Promise<void> {

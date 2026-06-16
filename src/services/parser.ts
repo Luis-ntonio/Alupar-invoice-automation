@@ -4,14 +4,17 @@ import { config } from "../config";
 import { extractPdfWithDocumentAi } from "./documentAi";
 import { ExtractedFields, SupportedFileType } from "../types";
 
-export function detectFileType(fileName: string, mimeType: string): SupportedFileType {
+export function detectFileType(fileName: string, mimeType: string, buffer?: Buffer): SupportedFileType {
+  // Magic bytes take priority when available — more reliable than metadata from Workato.
+  // ZIP = PK\x03\x04 (0x504B0304), PDF = %PDF (0x25504446)
+  if (buffer && buffer.length >= 4) {
+    if (buffer[0] === 0x50 && buffer[1] === 0x4B && buffer[2] === 0x03 && buffer[3] === 0x04) return "zip";
+    if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) return "pdf";
+  }
   const lower = fileName.toLowerCase();
-  if (lower.endsWith(".pdf") || mimeType.includes("pdf")) {
-    return "pdf";
-  }
-  if (lower.endsWith(".xml") || mimeType.includes("xml") || mimeType.includes("text/plain")) {
-    return "xml";
-  }
+  if (lower.endsWith(".pdf") || mimeType.includes("pdf")) return "pdf";
+  if (lower.endsWith(".xml") || mimeType.includes("xml") || mimeType.includes("text/plain")) return "xml";
+  if (lower.endsWith(".zip") || mimeType.includes("zip")) return "zip";
   return "unknown";
 }
 
@@ -46,7 +49,17 @@ async function extractFromPdf(buffer: Buffer): Promise<ExtractedFields> {
 }
 
 async function extractFromXml(buffer: Buffer): Promise<ExtractedFields> {
-  const xml = buffer.toString("utf-8").replace(/^\uFEFF/, "");
+  // Detectar encoding desde la declaración XML antes de convertir a string.
+  // Los primeros 200 bytes son siempre ASCII (la declaración XML usa solo ASCII).
+  const xmlHeader = buffer.slice(0, 200).toString("ascii");
+  const encodingMatch = xmlHeader.match(/encoding=["']([^"']+)["']/i);
+  const encodingRaw = (encodingMatch?.[1] ?? "utf-8").toLowerCase();
+  // Node.js no reconoce "iso-8859-1" directamente; se usa "latin1" que es equivalente.
+  const nodeEncoding: BufferEncoding =
+    encodingRaw === "iso-8859-1" || encodingRaw === "iso8859-1" || encodingRaw === "latin-1"
+      ? "latin1"
+      : "utf-8";
+  const xml = buffer.toString(nodeEncoding).replace(/^\uFEFF/, "");
   const parsed = await parseStringPromise(xml, { explicitArray: false, mergeAttrs: true, trim: true });
 
   // CDR (SUNAT ApplicationResponse) — confirmación de recepción, sin datos financieros
@@ -54,11 +67,9 @@ async function extractFromXml(buffer: Buffer): Promise<ExtractedFields> {
     return { rawTextSnippet: xml.slice(0, 500) };
   }
 
-  // Navigate UBL structure directly for reliable extraction
-  const invoice = (parsed["Invoice"] ?? parsed) as Record<string, unknown>;
-  const supplierParty = getPath(invoice, ["cac:AccountingSupplierParty", "cac:Party"]);
-  const invoiceLine = invoice["cac:InvoiceLine"];
-  const firstLine = Array.isArray(invoiceLine) ? invoiceLine[0] : invoiceLine;
+  const document = getBusinessDocument(parsed);
+  const supplierParty = getPath(document, ["cac:AccountingSupplierParty", "cac:Party"]);
+  const firstLine = getFirstDocumentLine(document);
 
   const emisor =
     getStringValue(getPath(supplierParty, ["cac:PartyName", "cbc:Name"])) ??
@@ -69,25 +80,52 @@ async function extractFromXml(buffer: Buffer): Promise<ExtractedFields> {
   const concepto = getStringValue(getPath(firstLine, ["cac:Item", "cbc:Description"]));
 
   const monto = parseAmount(
-    getStringValue(getPath(invoice, ["cac:LegalMonetaryTotal", "cbc:PayableAmount"])) ??
+    getStringValue(getPath(document, ["cac:LegalMonetaryTotal", "cbc:PayableAmount"])) ??
+    getStringValue(getPath(document, ["cac:RequestedMonetaryTotal", "cbc:PayableAmount"])) ??
     findNodeValue(parsed, ["PayableAmount", "cbc:PayableAmount"])
   );
 
   return {
     numeroDocumento:
-      getStringValue(invoice["cbc:ID"]) ?? findNodeValue(parsed, ["ID", "cbc:ID"]),
+      getStringValue(document["cbc:ID"]) ?? findNodeValue(parsed, ["ID", "cbc:ID"]),
     fechaEmision:
-      getStringValue(invoice["cbc:IssueDate"]) ?? findNodeValue(parsed, ["IssueDate", "cbc:IssueDate"]),
+      getStringValue(document["cbc:IssueDate"]) ?? findNodeValue(parsed, ["IssueDate", "cbc:IssueDate"]),
     fechaVencimiento:
-      getStringValue(invoice["cbc:DueDate"]) ?? findNodeValue(parsed, ["DueDate", "cbc:DueDate"]),
+      getStringValue(document["cbc:DueDate"]) ?? findNodeValue(parsed, ["DueDate", "cbc:DueDate"]),
     moneda: findNodeValue(parsed, ["DocumentCurrencyCode", "cbc:DocumentCurrencyCode", "moneda"]),
     monto,
     emisor,
     ruc,
     concepto,
+    tipoDocumento:
+      getStringValue(document["cbc:InvoiceTypeCode"]) ??
+      getDocumentTypeFallback(parsed, document) ??
+      findNodeValue(parsed, ["InvoiceTypeCode", "cbc:InvoiceTypeCode"]),
     receptor: findNodeValue(parsed, ["CustomerAssignedAccountID", "receptor", "CustomerParty"]),
     rawTextSnippet: xml.slice(0, 1000)
   };
+}
+
+function getBusinessDocument(parsed: Record<string, unknown>): Record<string, unknown> {
+  const document = parsed["Invoice"] ?? parsed["DebitNote"] ?? parsed;
+  return (document ?? parsed) as Record<string, unknown>;
+}
+
+function getFirstDocumentLine(document: Record<string, unknown>): unknown {
+  const line = document["cac:InvoiceLine"] ?? document["cac:DebitNoteLine"];
+  return Array.isArray(line) ? line[0] : line;
+}
+
+function getDocumentTypeFallback(parsed: Record<string, unknown>, document: Record<string, unknown>): string | undefined {
+  if (parsed["DebitNote"] != null) {
+    return "08";
+  }
+
+  return (
+    getStringValue(document["cbc:CreditNoteTypeCode"]) ??
+    getStringValue(document["cbc:DebitNoteTypeCode"]) ??
+    findNodeValue(parsed, ["CreditNoteTypeCode", "cbc:CreditNoteTypeCode", "DebitNoteTypeCode", "cbc:DebitNoteTypeCode"])
+  );
 }
 
 function matchValue(input: string, regex: RegExp, group = 1): string | undefined {
@@ -115,6 +153,14 @@ function getPath(obj: unknown, path: string[]): unknown {
 
 function getStringValue(value: unknown): string | undefined {
   if (value === null || value === undefined) return undefined;
+  if (Array.isArray(value)) {
+    const values = value
+      .map((item) => getStringValue(item)?.replace(/&#10;|\r?\n/g, " ").trim())
+      .filter((item): item is string => Boolean(item));
+
+    if (values.length === 0) return undefined;
+    return values.join(" | ");
+  }
   if (typeof value === "string") return value || undefined;
   if (typeof value === "number") return String(value);
   if (typeof value === "object") {
