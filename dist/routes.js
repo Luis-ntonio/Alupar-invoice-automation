@@ -12,10 +12,12 @@ const config_1 = require("./config");
 const blobStorage_1 = require("./services/blobStorage");
 const parser_1 = require("./services/parser");
 const repository_1 = require("./services/repository");
+const coesService_1 = require("./services/coesService");
 const sunatService_1 = require("./services/sunatService");
 const zipService_1 = require("./services/zipService");
 const classifier_1 = require("./utils/classifier");
 const hash_1 = require("./utils/hash");
+const auth_1 = require("./middleware/auth");
 // fieldSize de 25MB: Workato envía archivos como hex en campos de texto
 // (1 byte → 2 chars hex), por lo que un PDF de 10MB ocupa ~20MB como texto.
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fieldSize: 25 * 1024 * 1024 } });
@@ -807,6 +809,18 @@ function folderName(value) {
     return (normalized || "SIN_DATO").toUpperCase();
 }
 const BUILD_TIME = new Date().toISOString();
+router.get("/auth/config", (_req, res) => {
+    if (!config_1.config.azureAdTenantId || !config_1.config.azureAdClientId || !config_1.config.azureAdFrontendClientId) {
+        return res.json({ enabled: false });
+    }
+    return res.json({
+        enabled: true,
+        tenantId: config_1.config.azureAdTenantId,
+        frontendClientId: config_1.config.azureAdFrontendClientId,
+        apiClientId: config_1.config.azureAdClientId,
+        scope: `api://${config_1.config.azureAdClientId}/access_as_user`,
+    });
+});
 router.get("/health", (_req, res) => {
     res.json({
         status: "ok",
@@ -816,6 +830,23 @@ router.get("/health", (_req, res) => {
         zipParser: "yauzl",
         remoteUrlsDefault: config_1.config.enableWorkatoRemoteUrlsByDefault,
     });
+});
+router.post("/coes/sync", auth_1.requireAuth, async (req, res) => {
+    const yearRaw = req.body?.year;
+    const monthRaw = req.body?.month;
+    if (yearRaw != null || monthRaw != null) {
+        const year = Number(yearRaw);
+        const month = Number(monthRaw);
+        if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+            return res.status(400).json({
+                error: "Si envias year/month, deben ser enteros validos (month entre 1 y 12).",
+            });
+        }
+        const result = await (0, coesService_1.syncCoesMonthlyRequiredFiles)({ year, month }, blobStorage);
+        return res.status(result.status === "not_available" ? 404 : 200).json(result);
+    }
+    const result = await (0, coesService_1.runCoesAutoSync)(new Date(), blobStorage);
+    return res.status(result.status === "not_available" ? 404 : 200).json(result);
 });
 router.post("/intake", upload.any(), async (req, res) => {
     const auth = ensureAuthorized(req);
@@ -830,7 +861,7 @@ router.post("/intake", upload.any(), async (req, res) => {
     const result = await processIntakeFiles(files, metadata);
     return res.status(result.statusCode).json(result.body);
 });
-router.post("/intake/massive", upload.any(), async (req, res) => {
+router.post("/intake/massive", auth_1.requireAuth, upload.any(), async (req, res) => {
     const auth = ensureAuthorized(req, { allowWhenSecretMissingInRequest: true });
     if (!auth.authorized) {
         return res.status(auth.response.statusCode).json(auth.response.body);
@@ -880,7 +911,7 @@ router.post("/intake/massive", upload.any(), async (req, res) => {
         items,
     });
 });
-router.get("/documents", async (req, res) => {
+router.get("/documents", auth_1.requireAuth, async (req, res) => {
     const filters = {
         documentType: typeof req.query.documentType === "string" ? req.query.documentType : undefined,
         concept: typeof req.query.concept === "string" ? req.query.concept : undefined,
@@ -890,7 +921,7 @@ router.get("/documents", async (req, res) => {
     docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     res.json({ items: docs, count: docs.length });
 });
-router.get("/documents/:id", async (req, res) => {
+router.get("/documents/:id", auth_1.requireAuth, async (req, res) => {
     const item = await repository.findById(req.params.id);
     if (!item) {
         return res.status(404).json({ error: "Documento no encontrado." });
@@ -903,7 +934,7 @@ const updateDocumentSchema = zod_1.z.object({
     centroCostos: zod_1.z.string().trim().min(1).optional(),
     monto: zod_1.z.number().finite().nonnegative().nullable().optional(),
 });
-router.patch("/documents/:id", async (req, res) => {
+router.patch("/documents/:id", auth_1.requireAuth, async (req, res) => {
     const parsed = updateDocumentSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
         return res.status(400).json({ error: "Payload invalido para actualizar documento." });
@@ -976,7 +1007,7 @@ router.get("/documents/:id/file", async (req, res) => {
             res.status(500).json({ error: "No se pudo obtener el archivo." });
     }
 });
-router.post("/exports", async (req, res) => {
+router.post("/exports", auth_1.requireAuth, async (req, res) => {
     const ids = req.body.ids;
     if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: "Se requiere un array de IDs en el campo ids." });

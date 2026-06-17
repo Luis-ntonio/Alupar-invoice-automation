@@ -8,6 +8,7 @@ const express_1 = __importDefault(require("express"));
 const node_path_1 = __importDefault(require("node:path"));
 const config_1 = require("./config");
 const routes_1 = __importDefault(require("./routes"));
+const coesScheduler_1 = require("./services/coesScheduler");
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: "15mb" }));
@@ -19,4 +20,5 @@ app.get("*", (_req, res) => {
 });
 app.listen(config_1.config.port, () => {
     console.log(`Proyecto2 API ejecutandose en puerto ${config_1.config.port} (${config_1.config.nodeEnv}).`);
+    (0, coesScheduler_1.startCoesScheduler)();
 });

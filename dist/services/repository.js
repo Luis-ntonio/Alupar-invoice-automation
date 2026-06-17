@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createRepository = createRepository;
-const firestore_1 = require("@google-cloud/firestore");
+const cosmos_1 = require("@azure/cosmos");
 const node_fs_1 = require("node:fs");
 const node_path_1 = __importDefault(require("node:path"));
 const config_1 = require("../config");
@@ -63,39 +63,86 @@ class LocalJsonRepository {
         });
     }
 }
-class FirestoreRepository {
-    firestore = new firestore_1.Firestore({ ignoreUndefinedProperties: true });
-    collection = this.firestore.collection(config_1.config.firestoreCollection);
+class CosmosRepository {
+    client;
+    containerPromise = null;
+    constructor() {
+        if (!config_1.config.azureCosmosEndpoint || !config_1.config.azureCosmosKey) {
+            throw new Error("AZURE_COSMOS_ENDPOINT o AZURE_COSMOS_KEY no estan configurados.");
+        }
+        this.client = new cosmos_1.CosmosClient({
+            endpoint: config_1.config.azureCosmosEndpoint,
+            key: config_1.config.azureCosmosKey
+        });
+    }
+    async getContainer() {
+        if (!this.containerPromise) {
+            this.containerPromise = (async () => {
+                const { database } = await this.client.databases.createIfNotExists({
+                    id: config_1.config.azureCosmosDatabase
+                });
+                const { container } = await database.containers.createIfNotExists({
+                    id: config_1.config.azureCosmosContainer,
+                    partitionKey: { paths: ["/empresa"] }
+                });
+                return container;
+            })();
+        }
+        return this.containerPromise;
+    }
     async save(record) {
-        await this.collection.doc(record.id).set(record, { merge: true });
+        const container = await this.getContainer();
+        await container.items.upsert(record);
     }
     async findById(id) {
-        const snap = await this.collection.doc(id).get();
-        if (!snap.exists)
-            return null;
-        return snap.data();
+        const container = await this.getContainer();
+        const querySpec = {
+            query: "SELECT * FROM c WHERE c.id = @id",
+            parameters: [{ name: "@id", value: id }]
+        };
+        const { resources } = await container.items
+            .query(querySpec)
+            .fetchAll();
+        return resources[0] ?? null;
     }
     async findByMessageId(messageId) {
-        const result = await this.collection
-            .where("metadata.messageId", "==", messageId)
-            .limit(1)
-            .get();
-        if (result.empty)
-            return null;
-        return result.docs[0].data();
+        const container = await this.getContainer();
+        const querySpec = {
+            query: "SELECT TOP 1 * FROM c WHERE c.metadata.messageId = @messageId",
+            parameters: [{ name: "@messageId", value: messageId }]
+        };
+        const { resources } = await container.items
+            .query(querySpec)
+            .fetchAll();
+        return resources[0] ?? null;
     }
     async list(filters) {
-        let query = this.collection;
-        if (filters?.documentType)
-            query = query.where("documentType", "==", filters.documentType);
-        if (filters?.concept)
-            query = query.where("concept", "==", filters.concept);
-        if (filters?.status)
-            query = query.where("status", "==", filters.status);
-        const result = await query.get();
-        return result.docs.map((doc) => doc.data());
+        const container = await this.getContainer();
+        const clauses = [];
+        const parameters = [];
+        if (filters?.documentType) {
+            clauses.push("c.documentType = @documentType");
+            parameters.push({ name: "@documentType", value: filters.documentType });
+        }
+        if (filters?.concept) {
+            clauses.push("c.concept = @concept");
+            parameters.push({ name: "@concept", value: filters.concept });
+        }
+        if (filters?.status) {
+            clauses.push("c.status = @status");
+            parameters.push({ name: "@status", value: filters.status });
+        }
+        const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
+        const querySpec = {
+            query: `SELECT * FROM c${where}`,
+            parameters
+        };
+        const { resources } = await container.items
+            .query(querySpec)
+            .fetchAll();
+        return resources;
     }
 }
 function createRepository() {
-    return config_1.config.dbMode === "firestore" ? new FirestoreRepository() : new LocalJsonRepository();
+    return config_1.config.dbMode === "cosmos" ? new CosmosRepository() : new LocalJsonRepository();
 }

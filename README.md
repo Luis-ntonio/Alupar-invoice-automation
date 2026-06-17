@@ -7,8 +7,9 @@ Incluye:
 - Extraccion inicial de campos clave.
 - Clasificacion (`factura`, `comprobante`, `nota`).
 - Inferencia de concepto para agrupacion.
-- Persistencia en modo local o Firestore.
-- Almacenamiento en modo local o Cloud Storage.
+- Descarga automatica diaria de los Excels COES mensuales de Liquidaciones VTEA y Liquidaciones VTP.
+- Persistencia en modo local o Azure Cosmos DB.
+- Almacenamiento en modo local o Azure Blob Storage.
 - Generacion de ZIP por concepto (`/api/exports/:concept`).
 - Dashboard web simple en `public/`.
 
@@ -26,6 +27,7 @@ Servicio en `http://localhost:8080`.
 
 - `GET /api/health`
 - `POST /api/intake` (multipart/form-data, campo `files`)
+- `POST /api/coes/sync` (manual, autenticado; opcional `year` y `month` en body)
 - `GET /api/documents`
 - `GET /api/documents/:id`
 - `POST /api/exports/:concept`
@@ -71,3 +73,5 @@ Configura receta para enviar `multipart/form-data` al endpoint `/api/intake` con
 
 - En Cloud Run se recomienda usar autenticacion (IAM o API Gateway) antes de produccion.
 - La extraccion PDF/XML implementada es base; puedes sustituirla por Document AI para mayor precision.
+- La sincronizacion COES se ejecuta al iniciar el servicio y luego cada 24h.
+- Puedes deshabilitarla con `COES_VALIDATION_AUTO_SYNC=false`.

@@ -6,10 +6,25 @@ param(
   [string]$ContainerAppName = "proyecto2-facturas",
   [string]$ImageTag = "latest",
   [Parameter(Mandatory = $true)] [string]$WorkatoSharedSecret,
-  [switch]$EnableWorkatoRemoteUrls
+  [switch]$EnableWorkatoRemoteUrls,
+  [string]$AzureAdTenantId = "",
+  [string]$AzureAdClientId = "",
+  [string]$AzureAdFrontendClientId = "",
+  [string]$AllowedDomains = "",
+  [string]$AllowedEmails = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+function Invoke-AzProbe {
+  param([scriptblock]$Cmd)
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "SilentlyContinue"
+  $result = & $Cmd 2>$null
+  $ErrorActionPreference = $prev
+  if ($LASTEXITCODE -ne 0) { return $null }
+  return $result
+}
 
 function Normalize-Name {
   param([Parameter(Mandatory = $true)] [string]$Value)
@@ -23,13 +38,15 @@ $storageName = ("{0}st" -f $base)
 if ($storageName.Length -gt 24) { $storageName = $storageName.Substring(0, 24) }
 $acaEnvName = "$Prefix-aca-env"
 
-$storageShareRaw = "storage"
-$storageShareData = "data"
-$storageRefRaw = "storagefiles"
-$storageRefData = "datafiles"
+$cosmosName = ("{0}cosmos" -f $base)
+if ($cosmosName.Length -gt 44) { $cosmosName = $cosmosName.Substring(0, 44) }
+
+$storageContainerRaw = "raw"
+$storageContainerExports = "exports"
 
 Write-Host "[1/8] Seleccionando suscripcion..."
-az account set --subscription $SubscriptionId | Out-Null
+az account set --subscription $SubscriptionId
+if ($LASTEXITCODE -ne 0) { throw "No se pudo seleccionar la suscripcion '$SubscriptionId'. Verifica con: az account list" }
 
 Write-Host "[2/8] Validando recursos base..."
 $acrLoginServer = az acr show --name $acrName --resource-group $ResourceGroup --query "loginServer" -o tsv
@@ -41,22 +58,42 @@ if (-not $envId) { throw "No se encontro Container Apps Environment '$acaEnvName
 $storageKey = az storage account keys list --account-name $storageName --resource-group $ResourceGroup --query "[0].value" -o tsv
 if (-not $storageKey) { throw "No se encontro Storage Account '$storageName'. Ejecuta setup-azure.ps1 primero." }
 
-Write-Host "[3/8] Build de imagen en ACR..."
+$cosmosEndpoint = Invoke-AzProbe { az cosmosdb show --name $cosmosName --resource-group $ResourceGroup --query "documentEndpoint" -o tsv }
+if (-not $cosmosEndpoint) { throw "No se encontro Cosmos DB '$cosmosName'. Re-ejecuta setup-azure.ps1 con -CreateCosmos." }
+
+$cosmosKey = az cosmosdb keys list --name $cosmosName --resource-group $ResourceGroup --query "primaryMasterKey" -o tsv
+if (-not $cosmosKey) { throw "No se pudo obtener la key de Cosmos DB '$cosmosName'." }
+
+$storageConnectionString = "DefaultEndpointsProtocol=https;AccountName=$storageName;AccountKey=$storageKey;EndpointSuffix=core.windows.net"
+
+Write-Host "[2.1/8] Creando contenedores blob requeridos..."
+az storage container create --name $storageContainerRaw --account-name $storageName --account-key $storageKey --auth-mode key | Out-Null
+az storage container create --name $storageContainerExports --account-name $storageName --account-key $storageKey --auth-mode key | Out-Null
+
+Write-Host "[3/8] Build local de imagen y push a ACR..."
 $imageName = "$ContainerAppName`:$ImageTag"
-az acr build --registry $acrName --image $imageName .
 $imageRef = "$acrLoginServer/$imageName"
 
-Write-Host "[4/8] Obteniendo credenciales ACR para Container App..."
 $acrUser = az acr credential show --name $acrName --query "username" -o tsv
 $acrPass = az acr credential show --name $acrName --query "passwords[0].value" -o tsv
 
-Write-Host "[5/8] Registrando file shares en Container Apps Environment..."
-az containerapp env storage set --name $acaEnvName --resource-group $ResourceGroup --storage-name $storageRefRaw --azure-file-account-name $storageName --azure-file-account-key $storageKey --azure-file-share-name $storageShareRaw --access-mode ReadWrite | Out-Null
-az containerapp env storage set --name $acaEnvName --resource-group $ResourceGroup --storage-name $storageRefData --azure-file-account-name $storageName --azure-file-account-key $storageKey --azure-file-share-name $storageShareData --access-mode ReadWrite | Out-Null
+$acrPass | docker login $acrLoginServer --username $acrUser --password-stdin
+if ($LASTEXITCODE -ne 0) { throw "docker login en ACR fallo." }
+
+docker build -t $imageRef .
+if ($LASTEXITCODE -ne 0) { throw "docker build fallo." }
+
+docker push $imageRef
+if ($LASTEXITCODE -ne 0) { throw "docker push fallo." }
+
+Write-Host "[4/8] Obteniendo credenciales ACR para Container App..."
+
+Write-Host "[5/8] Preparando variables de runtime Azure..."
 
 Write-Host "[6/8] Generando manifiesto temporal de Container App..."
 $enableRemote = if ($EnableWorkatoRemoteUrls) { "true" } else { "false" }
-$revisionTag = ("rev-" + (($ImageTag.ToLower() -replace "[^a-z0-9-]", "-").Trim("-")))
+$ts = (Get-Date -Format "yyyyMMddHHmmss")
+$revisionTag = ("rev-" + (($ImageTag.ToLower() -replace "[^a-z0-9-]", "-").Trim("-")) + "-$ts")
 if ([string]::IsNullOrWhiteSpace($revisionTag)) { $revisionTag = "rev-1" }
 $yamlPath = Join-Path $env:TEMP "$ContainerAppName-aca.yaml"
 
@@ -76,6 +113,12 @@ properties:
     secrets:
       - name: acr-pwd
         value: $acrPass
+      - name: workato-secret
+        value: $WorkatoSharedSecret
+      - name: storage-connection
+        value: $storageConnectionString
+      - name: cosmos-key
+        value: $cosmosKey
     registries:
       - server: $acrLoginServer
         username: $acrUser
@@ -94,29 +137,37 @@ properties:
           - name: PORT
             value: "8080"
           - name: STORAGE_MODE
-            value: local
+            value: azure
           - name: DB_MODE
-            value: local
-          - name: LOCAL_STORAGE_DIR
-            value: /app/storage
-          - name: LOCAL_DATA_DIR
-            value: /app/data
+            value: cosmos
+          - name: AZURE_STORAGE_CONNECTION_STRING
+            secretRef: storage-connection
+          - name: AZURE_STORAGE_CONTAINER_RAW
+            value: $storageContainerRaw
+          - name: AZURE_STORAGE_CONTAINER_EXPORTS
+            value: $storageContainerExports
+          - name: AZURE_COSMOS_ENDPOINT
+            value: $cosmosEndpoint
+          - name: AZURE_COSMOS_KEY
+            secretRef: cosmos-key
+          - name: AZURE_COSMOS_DATABASE
+            value: facturasdb
+          - name: AZURE_COSMOS_CONTAINER
+            value: documents
           - name: WORKATO_SHARED_SECRET
-            value: $WorkatoSharedSecret
+            secretRef: workato-secret
           - name: ENABLE_WORKATO_REMOTE_URLS
             value: "$enableRemote"
-        volumeMounts:
-          - mountPath: /app/storage
-            volumeName: storage-volume
-          - mountPath: /app/data
-            volumeName: data-volume
-    volumes:
-      - name: storage-volume
-        storageType: AzureFile
-        storageName: $storageRefRaw
-      - name: data-volume
-        storageType: AzureFile
-        storageName: $storageRefData
+          - name: AZURE_AD_TENANT_ID
+            value: $AzureAdTenantId
+          - name: AZURE_AD_CLIENT_ID
+            value: $AzureAdClientId
+          - name: AZURE_AD_FRONTEND_CLIENT_ID
+            value: $AzureAdFrontendClientId
+          - name: ALLOWED_DOMAINS
+            value: $AllowedDomains
+          - name: ALLOWED_EMAILS
+            value: $AllowedEmails
     scale:
       minReplicas: 1
       maxReplicas: 1
@@ -125,7 +176,7 @@ properties:
 $yaml | Set-Content -Path $yamlPath -Encoding utf8
 
 Write-Host "[7/8] Deploy de Container App..."
-$exists = az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "name" -o tsv 2>$null
+$exists = Invoke-AzProbe { az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query "name" -o tsv }
 if ($exists) {
   az containerapp update --name $ContainerAppName --resource-group $ResourceGroup --yaml $yamlPath | Out-Null
 } else {

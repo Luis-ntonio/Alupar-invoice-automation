@@ -21,7 +21,7 @@ Esta carpeta replica el flujo de `gcp-real` para Azure con scripts de setup y de
 ## 2) Provisionar infraestructura base
 
 ```powershell
-./azure-real/setup-azure.ps1 -SubscriptionId "<subscription-id>" -ResourceGroup "rg-proyecto2" -Location "eastus" -Prefix "proyecto2"
+./azure-real/setup-azure.ps1 -SubscriptionId "<subscription-id>" -ResourceGroup "rg-proyecto2" -Location "eastus" -Prefix "proyecto2" -CreateCosmos
 ```
 
 Esto crea:
@@ -30,9 +30,9 @@ Esto crea:
 - Log Analytics Workspace
 - Container Apps Environment
 - Azure Container Registry (ACR)
-- Storage Account + Azure Files (`storage`, `data`)
+- Storage Account + Blob containers (`raw`, `exports`)
 - Key Vault
-- (Opcional) Cosmos DB SQL con `-CreateCosmos`
+- Cosmos DB SQL
 
 ## 3) Deploy de la app
 
@@ -83,6 +83,6 @@ Roles incluidos:
 
 ## 6) Notas importantes
 
-- Esta version corre la app actual en `STORAGE_MODE=local` y `DB_MODE=local`, pero con persistencia en Azure Files montados.
-- Para una migracion Azure nativa completa (Blob/Cosmos + SDK Azure en codigo), se requiere una segunda fase de cambios en `src/`.
+- Esta version despliega la app en modo Azure nativo: `STORAGE_MODE=azure` y `DB_MODE=cosmos`.
+- El deploy configura `AZURE_STORAGE_CONNECTION_STRING`, `AZURE_STORAGE_CONTAINER_*`, `AZURE_COSMOS_ENDPOINT` y `AZURE_COSMOS_KEY` automaticamente en Container Apps.
 - Si usas Azure Free, los limites alcanzan para PoC/piloto pequeno, no para produccion sostenida.

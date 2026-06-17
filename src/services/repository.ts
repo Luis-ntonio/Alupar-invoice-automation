@@ -1,4 +1,4 @@
-import { Firestore } from "@google-cloud/firestore";
+import { Container, CosmosClient, SqlQuerySpec } from "@azure/cosmos";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { config } from "../config";
@@ -68,39 +68,96 @@ class LocalJsonRepository implements RecordRepository {
   }
 }
 
-class FirestoreRepository implements RecordRepository {
-  private readonly firestore = new Firestore({ ignoreUndefinedProperties: true });
-  private readonly collection = this.firestore.collection(config.firestoreCollection);
+class CosmosRepository implements RecordRepository {
+  private readonly client: CosmosClient;
+  private containerPromise: Promise<Container> | null = null;
+
+  constructor() {
+    if (!config.azureCosmosEndpoint || !config.azureCosmosKey) {
+      throw new Error("AZURE_COSMOS_ENDPOINT o AZURE_COSMOS_KEY no estan configurados.");
+    }
+    this.client = new CosmosClient({
+      endpoint: config.azureCosmosEndpoint,
+      key: config.azureCosmosKey
+    });
+  }
+
+  private async getContainer(): Promise<Container> {
+    if (!this.containerPromise) {
+      this.containerPromise = (async () => {
+        const { database } = await this.client.databases.createIfNotExists({
+          id: config.azureCosmosDatabase
+        });
+        const { container } = await database.containers.createIfNotExists({
+          id: config.azureCosmosContainer,
+          partitionKey: { paths: ["/empresa"] }
+        });
+        return container;
+      })();
+    }
+    return this.containerPromise;
+  }
 
   async save(record: EmailRecord): Promise<void> {
-    await this.collection.doc(record.id).set(record, { merge: true });
+    const container = await this.getContainer();
+    await container.items.upsert(record);
   }
 
   async findById(id: string): Promise<EmailRecord | null> {
-    const snap = await this.collection.doc(id).get();
-    if (!snap.exists) return null;
-    return snap.data() as EmailRecord;
+    const container = await this.getContainer();
+    const querySpec: SqlQuerySpec = {
+      query: "SELECT * FROM c WHERE c.id = @id",
+      parameters: [{ name: "@id", value: id }]
+    };
+    const { resources } = await container.items
+      .query<EmailRecord>(querySpec)
+      .fetchAll();
+    return resources[0] ?? null;
   }
 
   async findByMessageId(messageId: string): Promise<EmailRecord | null> {
-    const result = await this.collection
-      .where("metadata.messageId", "==", messageId)
-      .limit(1)
-      .get();
-    if (result.empty) return null;
-    return result.docs[0].data() as EmailRecord;
+    const container = await this.getContainer();
+    const querySpec: SqlQuerySpec = {
+      query: "SELECT TOP 1 * FROM c WHERE c.metadata.messageId = @messageId",
+      parameters: [{ name: "@messageId", value: messageId }]
+    };
+    const { resources } = await container.items
+      .query<EmailRecord>(querySpec)
+      .fetchAll();
+    return resources[0] ?? null;
   }
 
   async list(filters?: Partial<Pick<EmailRecord, "documentType" | "concept" | "status">>): Promise<EmailRecord[]> {
-    let query: FirebaseFirestore.Query = this.collection;
-    if (filters?.documentType) query = query.where("documentType", "==", filters.documentType);
-    if (filters?.concept) query = query.where("concept", "==", filters.concept);
-    if (filters?.status) query = query.where("status", "==", filters.status);
-    const result = await query.get();
-    return result.docs.map((doc) => doc.data() as EmailRecord);
+    const container = await this.getContainer();
+    const clauses: string[] = [];
+    const parameters: { name: string; value: string }[] = [];
+
+    if (filters?.documentType) {
+      clauses.push("c.documentType = @documentType");
+      parameters.push({ name: "@documentType", value: filters.documentType });
+    }
+    if (filters?.concept) {
+      clauses.push("c.concept = @concept");
+      parameters.push({ name: "@concept", value: filters.concept });
+    }
+    if (filters?.status) {
+      clauses.push("c.status = @status");
+      parameters.push({ name: "@status", value: filters.status });
+    }
+
+    const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
+    const querySpec: SqlQuerySpec = {
+      query: `SELECT * FROM c${where}`,
+      parameters
+    };
+
+    const { resources } = await container.items
+      .query<EmailRecord>(querySpec)
+      .fetchAll();
+    return resources;
   }
 }
 
 export function createRepository(): RecordRepository {
-  return config.dbMode === "firestore" ? new FirestoreRepository() : new LocalJsonRepository();
+  return config.dbMode === "cosmos" ? new CosmosRepository() : new LocalJsonRepository();
 }

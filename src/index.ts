@@ -3,6 +3,7 @@ import express from "express";
 import path from "node:path";
 import { config } from "./config";
 import router from "./routes";
+import { startCoesScheduler } from "./services/coesScheduler";
 
 const app = express();
 
@@ -19,4 +20,5 @@ app.get("*", (_req, res) => {
 
 app.listen(config.port, () => {
   console.log(`Proyecto2 API ejecutandose en puerto ${config.port} (${config.nodeEnv}).`);
+  startCoesScheduler();
 });

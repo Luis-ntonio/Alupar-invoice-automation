@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Iniciar sesión — Sistema de Facturas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: 'Manrope', sans-serif;
+        background: #070c1a;
+        color: #eef4ff;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .card {
+        background: #0f1830;
+        border: 1px solid rgba(79, 215, 255, 0.15);
+        border-radius: 16px;
+        padding: 48px 40px;
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+      }
+      .brand {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: #4fd7ff;
+        margin-bottom: 36px;
+        display: block;
+      }
+      h1 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 26px;
+        font-weight: 700;
+        color: #eef4ff;
+        margin-bottom: 10px;
+      }
+      .subtitle {
+        color: #7a9ec0;
+        font-size: 14px;
+        line-height: 1.6;
+        margin-bottom: 36px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        padding: 14px 24px;
+        background: #1f6fff;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-family: 'Manrope', sans-serif;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s, opacity 0.15s;
+      }
+      .btn:hover:not(:disabled) { background: #1a5fdd; }
+      .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+      .status {
+        margin-top: 18px;
+        font-size: 13px;
+        color: #7a9ec0;
+        min-height: 18px;
+      }
+      .status.error { color: #ff6b6b; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <span class="brand">Sistema Automatizado de Facturas</span>
+      <h1>Bienvenido</h1>
+      <p class="subtitle">Inicia sesión con tu cuenta Microsoft para acceder al panel de procesamiento documental.</p>
+      <button class="btn" id="loginBtn" disabled>
+        <svg width="20" height="20" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect width="10" height="10" fill="#f25022"/>
+          <rect x="11" width="10" height="10" fill="#7fba00"/>
+          <rect y="11" width="10" height="10" fill="#00a4ef"/>
+          <rect x="11" y="11" width="10" height="10" fill="#ffb900"/>
+        </svg>
+        Iniciar sesión con Microsoft
+      </button>
+      <p class="status" id="status">Cargando configuración...</p>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById('status');
+      const loginBtn = document.getElementById('loginBtn');
+
+      function setError(msg) {
+        statusEl.className = 'status error';
+        statusEl.textContent = msg;
+        loginBtn.disabled = false;
+      }
+
+      fetch('/api/auth/config')
+        .then(function(r) { return r.json(); })
+        .then(function(cfg) {
+          if (!cfg.enabled) {
+            window.location.replace('/');
+            return;
+          }
+
+          var msalApp = new msal.PublicClientApplication({
+            auth: {
+              clientId: cfg.frontendClientId,
+              authority: 'https://login.microsoftonline.com/' + cfg.tenantId,
+              redirectUri: window.location.origin + '/login.html',
+            },
+            cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+          });
+
+          msalApp.handleRedirectPromise()
+            .then(function(response) {
+              if (response) {
+                window.location.replace('/');
+                return;
+              }
+              var accounts = msalApp.getAllAccounts();
+              if (accounts.length > 0) {
+                window.location.replace('/');
+                return;
+              }
+              statusEl.textContent = '';
+              loginBtn.disabled = false;
+              loginBtn.addEventListener('click', function() {
+                loginBtn.disabled = true;
+                statusEl.className = 'status';
+                statusEl.textContent = 'Redirigiendo a Microsoft...';
+                msalApp.loginRedirect({ scopes: [cfg.scope] });
+              });
+            })
+            .catch(function(err) {
+              setError('Error al iniciar sesión: ' + (err.message || 'intente de nuevo.'));
+            });
+        })
+        .catch(function() {
+          setError('No se pudo conectar con el servidor.');
+        });
+    </script>
+  </body>
+</html>
