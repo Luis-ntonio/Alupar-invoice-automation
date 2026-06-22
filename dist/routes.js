@@ -13,6 +13,7 @@ const blobStorage_1 = require("./services/blobStorage");
 const parser_1 = require("./services/parser");
 const repository_1 = require("./services/repository");
 const coesService_1 = require("./services/coesService");
+const centroCostosService_1 = require("./services/centroCostosService");
 const sunatService_1 = require("./services/sunatService");
 const zipService_1 = require("./services/zipService");
 const classifier_1 = require("./utils/classifier");
@@ -719,6 +720,10 @@ async function processIntakeFiles(files, metadata) {
     }
     const documentType = (0, classifier_1.classifyDocument)(extracted);
     const concept = extracted.concepto ?? (0, classifier_1.inferConcept)(extracted);
+    const centroCostosResult = await (0, centroCostosService_1.resolveCentroCostos)(extracted, blobStorage).catch((err) => {
+        console.warn("[centroCostos] Resolucion fallo:", err instanceof Error ? err.message : err);
+        return {};
+    });
     let sunatValidacion;
     const numDoc = extracted.numeroDocumento;
     const rucExtracted = extracted.ruc;
@@ -753,8 +758,10 @@ async function processIntakeFiles(files, metadata) {
         documentType,
         concept,
         empresa: extracted.emisor ?? "",
+        centroCostos: centroCostosResult.centroCostos,
         ruc: extracted.ruc ?? "",
         sunatValidacion,
+        coesValidacion: centroCostosResult.coesValidacion,
         status: extractionError ? "error" : "pendiente",
         error: extractionError,
         createdAt: now,
@@ -847,6 +854,46 @@ router.post("/coes/sync", auth_1.requireAuth, async (req, res) => {
     }
     const result = await (0, coesService_1.runCoesAutoSync)(new Date(), blobStorage);
     return res.status(result.status === "not_available" ? 404 : 200).json(result);
+});
+router.get("/coes/periods", auth_1.requireAuth, async (_req, res) => {
+    const entries = await (0, coesService_1.listCoesIndex)(blobStorage);
+    const periods = entries
+        .map((e) => ({ dataset: e.dataset, year: e.period.year, month: e.period.month, informeCode: e.informeCode }))
+        .sort((a, b) => b.year - a.year || b.month - a.month || a.dataset.localeCompare(b.dataset));
+    return res.json({ periods });
+});
+const coesMatrixQuerySchema = zod_1.z.object({
+    dataset: zod_1.z.enum(["vtea", "vtp"]),
+    year: zod_1.z.coerce.number().int(),
+    month: zod_1.z.coerce.number().int().min(1).max(12),
+});
+router.get("/coes/matrix", auth_1.requireAuth, async (req, res) => {
+    const parsed = coesMatrixQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+        return res.status(400).json({ error: "Parametros invalidos. Se requiere dataset (vtea|vtp), year y month." });
+    }
+    const { dataset, year, month } = parsed.data;
+    const matrix = await (0, centroCostosService_1.getCoesMatrixForPeriod)(dataset, { year, month }, blobStorage);
+    if (!matrix) {
+        return res.status(404).json({ error: `No se encontro el excel COES ${dataset.toUpperCase()} para ${month}/${year}.` });
+    }
+    return res.json(matrix);
+});
+const coesVerifyBodySchema = zod_1.z.object({
+    dataset: zod_1.z.enum(["vtea", "vtp"]),
+    year: zod_1.z.number().int(),
+    month: zod_1.z.number().int().min(1).max(12),
+    supplierRuc: zod_1.z.string().trim().min(1),
+    monto: zod_1.z.number().finite(),
+});
+router.post("/coes/verify", auth_1.requireAuth, async (req, res) => {
+    const parsed = coesVerifyBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+        return res.status(400).json({ error: "Payload invalido. Se requiere dataset, year, month, supplierRuc y monto." });
+    }
+    const { dataset, year, month, supplierRuc, monto } = parsed.data;
+    const result = await (0, centroCostosService_1.verifyCoesAmountForPeriod)(dataset, { year, month }, supplierRuc, monto, blobStorage);
+    return res.json(result);
 });
 router.post("/intake", upload.any(), async (req, res) => {
     const auth = ensureAuthorized(req);

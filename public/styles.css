@@ -48,7 +48,7 @@ select {
 }
 
 .wrap {
-  width: min(1200px, 94vw);
+  width: min(1600px, 97vw);
   margin: 0 auto;
 }
 
@@ -296,7 +296,8 @@ h2 {
 .btn-secondary,
 .btn-primary {
   border-radius: 999px;
-  padding: 0.68rem 1rem;
+  padding: 0.42rem 0.78rem;
+  font-size: 0.84rem;
   border: 1px solid transparent;
   cursor: pointer;
   transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
@@ -461,6 +462,117 @@ tbody tr:hover {
 .badge-error {
   background: rgba(255, 95, 109, 0.16);
   color: #ffb3bc;
+}
+
+.badge-validado {
+  background: rgba(57, 231, 196, 0.15);
+  color: #8df4df;
+}
+
+.badge-no_coincide {
+  background: rgba(255, 95, 109, 0.16);
+  color: #ffb3bc;
+}
+
+.badge-no_encontrado {
+  background: rgba(255, 190, 85, 0.16);
+  color: #ffd38d;
+}
+
+.coes-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.coes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: #8ab4d4;
+}
+
+.coes-field select,
+.coes-field input {
+  border: 1px solid rgba(79, 215, 255, 0.2);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: rgba(6, 18, 40, 0.95);
+  color: #eaf2ff;
+  outline: none;
+  min-width: 160px;
+}
+
+.coes-col-alupar {
+  background: rgba(79, 215, 255, 0.12);
+}
+
+.coes-cards {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.coes-card {
+  flex: 0 0 230px;
+  background: rgba(6, 18, 40, 0.7);
+  border: 1px solid rgba(79, 215, 255, 0.18);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.coes-card-name {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #eaf2ff;
+}
+
+.coes-card-ruc {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  color: #8ab4d4;
+}
+
+.coes-card-monto {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-family: "IBM Plex Mono", monospace;
+  color: #eaf2ff;
+}
+
+.badge-cobra {
+  background: rgba(57, 231, 196, 0.15);
+  color: #8df4df;
+}
+
+.badge-paga {
+  background: rgba(255, 190, 85, 0.16);
+  color: #ffd38d;
+}
+
+.coes-cards-group {
+  margin-bottom: 1.1rem;
+}
+
+.coes-cards-group-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+}
+
+.badge-cobra-text {
+  color: #8df4df;
+}
+
+.badge-paga-text {
+  color: #ffd38d;
 }
 
 .file-links {

@@ -63,6 +63,14 @@ class BlobStorageService {
         const target = `coes/liquidaciones-vtea/${year}/${monthPart}/${sanitizeFileName(fileName)}`;
         return this.saveAtPath(buffer, target);
     }
+    async readBuffer(storagePath) {
+        const stream = await this.openReadStream(storagePath);
+        const chunks = [];
+        for await (const chunk of stream) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        return Buffer.concat(chunks);
+    }
     async openReadStream(storagePath) {
         if (config_1.config.storageMode === "azure") {
             const container = await this.getContainerClient(config_1.config.azureStorageContainerRaw);

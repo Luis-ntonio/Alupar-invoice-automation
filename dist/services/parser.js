@@ -77,15 +77,15 @@ async function extractFromXml(buffer) {
         getStringValue(getPath(document, ["cac:RequestedMonetaryTotal", "cbc:PayableAmount"])) ??
         findNodeValue(parsed, ["PayableAmount", "cbc:PayableAmount"]));
     return {
-        numeroDocumento: getStringValue(document["cbc:ID"]) ?? findNodeValue(parsed, ["ID", "cbc:ID"]),
-        fechaEmision: getStringValue(document["cbc:IssueDate"]) ?? findNodeValue(parsed, ["IssueDate", "cbc:IssueDate"]),
-        fechaVencimiento: getStringValue(document["cbc:DueDate"]) ?? findNodeValue(parsed, ["DueDate", "cbc:DueDate"]),
+        numeroDocumento: getStringValue(findChild(document, "ID")) ?? findNodeValue(parsed, ["ID", "cbc:ID"]),
+        fechaEmision: getStringValue(findChild(document, "IssueDate")) ?? findNodeValue(parsed, ["IssueDate", "cbc:IssueDate"]),
+        fechaVencimiento: getStringValue(findChild(document, "DueDate")) ?? findNodeValue(parsed, ["DueDate", "cbc:DueDate"]),
         moneda: findNodeValue(parsed, ["DocumentCurrencyCode", "cbc:DocumentCurrencyCode", "moneda"]),
         monto,
         emisor,
         ruc,
         concepto,
-        tipoDocumento: getStringValue(document["cbc:InvoiceTypeCode"]) ??
+        tipoDocumento: getStringValue(findChild(document, "InvoiceTypeCode")) ??
             getDocumentTypeFallback(parsed, document) ??
             findNodeValue(parsed, ["InvoiceTypeCode", "cbc:InvoiceTypeCode"]),
         receptor: findNodeValue(parsed, ["CustomerAssignedAccountID", "receptor", "CustomerParty"]),
@@ -96,16 +96,35 @@ function getBusinessDocument(parsed) {
     const document = parsed["Invoice"] ?? parsed["DebitNote"] ?? parsed;
     return (document ?? parsed);
 }
+// Algunos emisores (ej. generadoras electricas) declaran namespaces UBL con
+// prefijos alternativos (n1:/n2:) en vez de cac:/cbc: para los mismos elementos.
+// findChild compara solo el nombre local, ignorando el prefijo usado.
+function localName(key) {
+    const idx = key.indexOf(":");
+    return idx >= 0 ? key.slice(idx + 1) : key;
+}
+function findChild(obj, name) {
+    if (obj === null || obj === undefined || typeof obj !== "object")
+        return undefined;
+    const rec = obj;
+    if (name in rec)
+        return rec[name];
+    for (const key of Object.keys(rec)) {
+        if (localName(key) === name)
+            return rec[key];
+    }
+    return undefined;
+}
 function getFirstDocumentLine(document) {
-    const line = document["cac:InvoiceLine"] ?? document["cac:DebitNoteLine"];
+    const line = findChild(document, "InvoiceLine") ?? findChild(document, "DebitNoteLine");
     return Array.isArray(line) ? line[0] : line;
 }
 function getDocumentTypeFallback(parsed, document) {
     if (parsed["DebitNote"] != null) {
         return "08";
     }
-    return (getStringValue(document["cbc:CreditNoteTypeCode"]) ??
-        getStringValue(document["cbc:DebitNoteTypeCode"]) ??
+    return (getStringValue(findChild(document, "CreditNoteTypeCode")) ??
+        getStringValue(findChild(document, "DebitNoteTypeCode")) ??
         findNodeValue(parsed, ["CreditNoteTypeCode", "cbc:CreditNoteTypeCode", "DebitNoteTypeCode", "cbc:DebitNoteTypeCode"]));
 }
 function matchValue(input, regex, group = 1) {
@@ -123,9 +142,9 @@ function parseAmount(raw) {
 function getPath(obj, path) {
     let current = obj;
     for (const key of path) {
-        if (current === null || current === undefined || typeof current !== "object")
+        current = findChild(current, localName(key));
+        if (current === undefined)
             return undefined;
-        current = current[key];
     }
     return current;
 }
@@ -184,7 +203,7 @@ function recursiveFind(value, keys) {
     }
     const obj = value;
     for (const [key, node] of Object.entries(obj)) {
-        if (keys.has(key)) {
+        if (keys.has(key) || keys.has(localName(key))) {
             if (typeof node === "string" || typeof node === "number") {
                 return node;
             }

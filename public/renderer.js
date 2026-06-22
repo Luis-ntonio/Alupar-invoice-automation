@@ -1,75 +1,3 @@
-// --- Auth (MSAL) ------------------------------------------------------------
-let _msalApp = null;
-let _msalAccount = null;
-let _msalScope = null;
-let _authEnabled = false;
-
-async function initAuth() {
-  let cfg;
-  try {
-    cfg = await fetch("/api/auth/config").then((r) => r.json());
-  } catch {
-    return true;
-  }
-  if (!cfg.enabled) return true;
-
-  _authEnabled = true;
-  _msalScope = cfg.scope;
-
-  _msalApp = new msal.PublicClientApplication({
-    auth: {
-      clientId: cfg.frontendClientId,
-      authority: "https://login.microsoftonline.com/" + cfg.tenantId,
-      redirectUri: window.location.origin + "/login.html",
-    },
-    cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false },
-  });
-
-  await _msalApp.handleRedirectPromise();
-
-  const accounts = _msalApp.getAllAccounts();
-  if (!accounts.length) {
-    window.location.replace("/login.html");
-    return false;
-  }
-
-  _msalAccount = accounts[0];
-  showUserBadge(_msalAccount);
-  return true;
-}
-
-async function getToken() {
-  if (!_authEnabled || !_msalApp || !_msalAccount) return null;
-  try {
-    const r = await _msalApp.acquireTokenSilent({ scopes: [_msalScope], account: _msalAccount });
-    return r.accessToken;
-  } catch {
-    window.location.replace("/login.html");
-    return null;
-  }
-}
-
-async function authFetch(url, options = {}) {
-  const token = await getToken();
-  const headers = Object.assign({}, options.headers);
-  if (token) headers["Authorization"] = "Bearer " + token;
-  return fetch(url, Object.assign({}, options, { headers }));
-}
-
-function showUserBadge(account) {
-  const nav = document.querySelector(".menu");
-  if (!nav) return;
-  const div = document.createElement("div");
-  div.style.cssText = "display:flex;align-items:center;gap:12px;font-size:13px;color:#8ab4d4;margin-left:8px";
-  div.innerHTML =
-    '<span>' + escHtml(account.name || account.username || "") + "</span>" +
-    '<button id="logoutBtn" style="padding:5px 12px;background:transparent;border:1px solid rgba(79,215,255,0.3);border-radius:6px;color:#4fd7ff;font-size:12px;cursor:pointer;font-family:inherit">Salir</button>';
-  nav.after(div);
-  document.getElementById("logoutBtn").addEventListener("click", () => {
-    _msalApp.logoutRedirect({ account: _msalAccount, postLogoutRedirectUri: "/login.html" });
-  });
-}
-
 // --- State -----------------------------------------------------------------
 let allDocuments = [];
 let chartInstance = null;
@@ -81,9 +9,9 @@ let activeDropdownCol = null;
 let chartCompaniesMenuOpen = false;
 
 const COST_CENTER_OPTIONS = [
-  "CC-001 Operaciones",
-  "CC-002 Mantenimiento",
-  "CC-003 Comercial",
+  "Peajes",
+  "COES-VTEA",
+  "COES-VTP",
   "CC-004 Finanzas",
   "CC-005 Logistica",
   "CC-006 Proyectos",
@@ -99,6 +27,7 @@ const COLUMNS = [
   { key: "ruc", label: "RUC" },
   { key: "documentType", label: "Tipo Doc", editable: true },
   { key: "centroCostos", label: "Centro de costos", editable: true },
+  { key: "coesValidacion", label: "Val. COES", title: "Validacion de monto COES (VTEA/VTP)" },
   { key: "concept", label: "Concepto" },
   { key: "monto", label: "Monto", editable: true },
   { key: "estadoComprobante", label: "Est. CP", title: "Estado del Comprobante (SUNAT)" },
@@ -131,14 +60,6 @@ const emailPreviewTitle = document.getElementById("emailPreviewTitle");
 const closeEmailPreviewBtn = document.getElementById("closeEmailPreviewBtn");
 
 // --- Helpers ----------------------------------------------------------------
-function escHtml(str) {
-  return String(str ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;");
-}
-
 function parseDateOnly(raw) {
   if (!raw) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return new Date(raw + "T00:00:00");
@@ -175,6 +96,7 @@ function getFilterValue(item, key) {
     case "ruc": return item.ruc || "-";
     case "documentType": return item.documentType || "-";
     case "centroCostos": return item.centroCostos || "-";
+    case "coesValidacion": return item.coesValidacion?.status || "-";
     case "concept": return item.concept || "-";
     case "monto": return item.extracted?.monto != null ? Number(item.extracted.monto).toFixed(2) : "-";
     case "estadoComprobante": return item.sunatValidacion?.estadoComprobante || "-";
@@ -419,11 +341,11 @@ async function handleCellEditCommit(el) {
     patch = { documentType: value };
   } else if (field === "centroCostos") {
     const value = String(el.value || "").trim();
-    if (value === (doc.centroCostos || "")) {
+    if (!value || value === (doc.centroCostos || "")) {
       applyAndRender();
       return;
     }
-    patch = { centroCostos: value || "CC-001 Operaciones" };
+    patch = { centroCostos: value };
   } else if (field === "monto") {
     const raw = String(el.value || "").trim();
     if (!raw) {
@@ -503,6 +425,7 @@ function renderRows(items) {
         <td class="mono">${cellForKey(item, "ruc")}</td>
         <td>${cellForKey(item, "documentType")}</td>
         <td>${cellForKey(item, "centroCostos")}</td>
+        <td title="${escHtml(item.coesValidacion?.detalle || "")}">${cellForKey(item, "coesValidacion")}</td>
         <td>${cellForKey(item, "concept")}</td>
         <td class="mono">${cellForKey(item, "monto")}</td>
         <td class="sunat-cell">${cellForKey(item, "estadoComprobante")}</td>
@@ -869,6 +792,7 @@ function exportExcel() {
     RUC: getDisplayValue(item, "ruc"),
     "Tipo Doc": getDisplayValue(item, "documentType"),
     "Centro de costos": getDisplayValue(item, "centroCostos"),
+    "Val. COES": getDisplayValue(item, "coesValidacion"),
     Concepto: getDisplayValue(item, "concept"),
     Monto: getDisplayValue(item, "monto"),
     "Est. CP": getDisplayValue(item, "estadoComprobante"),

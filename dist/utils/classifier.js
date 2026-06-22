@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.normalizeText = normalizeText;
 exports.classifyDocument = classifyDocument;
 exports.inferConcept = inferConcept;
 const conceptRules = {

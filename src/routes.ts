@@ -7,12 +7,13 @@ import { config } from "./config";
 import { BlobStorageService } from "./services/blobStorage";
 import { detectFileType, extractFields } from "./services/parser";
 import { createRepository } from "./services/repository";
-import { runCoesAutoSync, syncCoesMonthlyRequiredFiles } from "./services/coesService";
+import { CoesDataset, runCoesAutoSync, syncCoesMonthlyRequiredFiles, listCoesIndex } from "./services/coesService";
+import { resolveCentroCostos, getCoesMatrixForPeriod, verifyCoesAmountForPeriod } from "./services/centroCostosService";
 import { validarEnSunat } from "./services/sunatService";
 import { extractSupportedZipEntries, extractZipContents, filterAccessibleFiles, streamZipToWritable } from "./services/zipService";
 import { classifyDocument, inferConcept } from "./utils/classifier";
 import { createSha256 } from "./utils/hash";
-import { AttachedFile, EmailRecord, IncomingMetadata, SunatValidacion } from "./types";
+import { AttachedFile, EmailRecord, ExtractedFields, IncomingMetadata, SunatValidacion } from "./types";
 import { requireAuth } from "./middleware/auth";
 
 // fieldSize de 25MB: Workato envía archivos como hex en campos de texto
@@ -713,6 +714,12 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
   const documentType = classifyDocument(extracted);
   const concept = (extracted as any).concepto ?? inferConcept(extracted);
 
+  const centroCostosResult: { centroCostos?: string; coesValidacion?: EmailRecord["coesValidacion"] } =
+    await resolveCentroCostos(extracted as ExtractedFields, blobStorage).catch((err) => {
+      console.warn("[centroCostos] Resolucion fallo:", err instanceof Error ? err.message : err);
+      return {};
+    });
+
   let sunatValidacion: SunatValidacion | undefined;
   const numDoc = (extracted as any).numeroDocumento as string | undefined;
   const rucExtracted = (extracted as any).ruc as string | undefined;
@@ -748,8 +755,10 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
     documentType,
     concept,
     empresa: (extracted as any).emisor ?? "",
+    centroCostos: centroCostosResult.centroCostos,
     ruc: (extracted as any).ruc ?? "",
     sunatValidacion,
+    coesValidacion: centroCostosResult.coesValidacion,
     status: extractionError ? "error" : "pendiente",
     error: extractionError,
     createdAt: now,
@@ -855,6 +864,51 @@ router.post("/coes/sync", requireAuth, async (req, res) => {
 
   const result = await runCoesAutoSync(new Date(), blobStorage);
   return res.status(result.status === "not_available" ? 404 : 200).json(result);
+});
+
+router.get("/coes/periods", requireAuth, async (_req, res) => {
+  const entries = await listCoesIndex(blobStorage);
+  const periods = entries
+    .map((e) => ({ dataset: e.dataset, year: e.period.year, month: e.period.month, informeCode: e.informeCode }))
+    .sort((a, b) => b.year - a.year || b.month - a.month || a.dataset.localeCompare(b.dataset));
+  return res.json({ periods });
+});
+
+const coesMatrixQuerySchema = z.object({
+  dataset: z.enum(["vtea", "vtp"]),
+  year: z.coerce.number().int(),
+  month: z.coerce.number().int().min(1).max(12),
+});
+
+router.get("/coes/matrix", requireAuth, async (req, res) => {
+  const parsed = coesMatrixQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Parametros invalidos. Se requiere dataset (vtea|vtp), year y month." });
+  }
+  const { dataset, year, month } = parsed.data;
+  const matrix = await getCoesMatrixForPeriod(dataset as CoesDataset, { year, month }, blobStorage);
+  if (!matrix) {
+    return res.status(404).json({ error: `No se encontro el excel COES ${dataset.toUpperCase()} para ${month}/${year}.` });
+  }
+  return res.json(matrix);
+});
+
+const coesVerifyBodySchema = z.object({
+  dataset: z.enum(["vtea", "vtp"]),
+  year: z.number().int(),
+  month: z.number().int().min(1).max(12),
+  supplierRuc: z.string().trim().min(1),
+  monto: z.number().finite(),
+});
+
+router.post("/coes/verify", requireAuth, async (req, res) => {
+  const parsed = coesVerifyBodySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Payload invalido. Se requiere dataset, year, month, supplierRuc y monto." });
+  }
+  const { dataset, year, month, supplierRuc, monto } = parsed.data;
+  const result = await verifyCoesAmountForPeriod(dataset as CoesDataset, { year, month }, supplierRuc, monto, blobStorage);
+  return res.json(result);
 });
 
 router.post("/intake", upload.any(), async (req, res) => {

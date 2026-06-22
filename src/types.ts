@@ -44,6 +44,17 @@ export interface SunatValidacion {
   validadoEn: string;
 }
 
+export type CoesValidacionStatus = "validado" | "no_coincide" | "no_encontrado";
+
+export interface CoesValidacion {
+  dataset: "vtea" | "vtp";
+  informeCode?: string;
+  montoFactura: number;
+  montoEsperado?: number;
+  status: CoesValidacionStatus;
+  detalle: string;
+}
+
 /** One registro = all files that arrived in a single email. */
 export interface EmailRecord {
   id: string;
@@ -56,6 +67,7 @@ export interface EmailRecord {
   centroCostos?: string;
   ruc: string;
   sunatValidacion?: SunatValidacion;
+  coesValidacion?: CoesValidacion;
   status: ProcessStatus;
   error?: string;
   createdAt: string;

@@ -25,8 +25,12 @@ if (-not $ApiIdentifierUri) {
 }
 az ad app update --id $apiObjectId --identifier-uris $ApiIdentifierUri | Out-Null
 
-Write-Host "[2/6] Configurando scope OAuth2 y app roles en API..."
-$scopeBody = '{"api":{"oauth2PermissionScopes":[{"id":"55555555-5555-5555-5555-555555555555","adminConsentDescription":"Permite al frontend llamar la API en nombre del usuario","adminConsentDisplayName":"Llamar la API de facturas","isEnabled":true,"type":"User","userConsentDescription":"Permite acceder al panel de facturas","userConsentDisplayName":"Acceder al panel","value":"access_as_user"}]}}'
+Write-Host "[2/6] Configurando scope OAuth2, version de token y app roles en API..."
+# requestedAccessTokenVersion=2 es necesario para que Azure AD emita tokens v2.0
+# (issuer login.microsoftonline.com/.../v2.0). Sin esto, emite tokens v1.0
+# (issuer sts.windows.net/...) y el middleware (src/middleware/auth.ts) los rechaza
+# con "jwt issuer invalid" aunque el audience sea correcto.
+$scopeBody = '{"api":{"requestedAccessTokenVersion":2,"oauth2PermissionScopes":[{"id":"55555555-5555-5555-5555-555555555555","adminConsentDescription":"Permite al frontend llamar la API en nombre del usuario","adminConsentDisplayName":"Llamar la API de facturas","isEnabled":true,"type":"User","userConsentDescription":"Permite acceder al panel de facturas","userConsentDisplayName":"Acceder al panel","value":"access_as_user"}]}}'
 az rest --method PATCH --url "https://graph.microsoft.com/v1.0/applications/$apiObjectId" --body $scopeBody --headers "Content-Type=application/json" | Out-Null
 
 Write-Host "[2b/6] Configurando app roles en API..."

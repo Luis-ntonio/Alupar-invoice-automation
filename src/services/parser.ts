@@ -87,18 +87,18 @@ async function extractFromXml(buffer: Buffer): Promise<ExtractedFields> {
 
   return {
     numeroDocumento:
-      getStringValue(document["cbc:ID"]) ?? findNodeValue(parsed, ["ID", "cbc:ID"]),
+      getStringValue(findChild(document, "ID")) ?? findNodeValue(parsed, ["ID", "cbc:ID"]),
     fechaEmision:
-      getStringValue(document["cbc:IssueDate"]) ?? findNodeValue(parsed, ["IssueDate", "cbc:IssueDate"]),
+      getStringValue(findChild(document, "IssueDate")) ?? findNodeValue(parsed, ["IssueDate", "cbc:IssueDate"]),
     fechaVencimiento:
-      getStringValue(document["cbc:DueDate"]) ?? findNodeValue(parsed, ["DueDate", "cbc:DueDate"]),
+      getStringValue(findChild(document, "DueDate")) ?? findNodeValue(parsed, ["DueDate", "cbc:DueDate"]),
     moneda: findNodeValue(parsed, ["DocumentCurrencyCode", "cbc:DocumentCurrencyCode", "moneda"]),
     monto,
     emisor,
     ruc,
     concepto,
     tipoDocumento:
-      getStringValue(document["cbc:InvoiceTypeCode"]) ??
+      getStringValue(findChild(document, "InvoiceTypeCode")) ??
       getDocumentTypeFallback(parsed, document) ??
       findNodeValue(parsed, ["InvoiceTypeCode", "cbc:InvoiceTypeCode"]),
     receptor: findNodeValue(parsed, ["CustomerAssignedAccountID", "receptor", "CustomerParty"]),
@@ -111,8 +111,26 @@ function getBusinessDocument(parsed: Record<string, unknown>): Record<string, un
   return (document ?? parsed) as Record<string, unknown>;
 }
 
+// Algunos emisores (ej. generadoras electricas) declaran namespaces UBL con
+// prefijos alternativos (n1:/n2:) en vez de cac:/cbc: para los mismos elementos.
+// findChild compara solo el nombre local, ignorando el prefijo usado.
+function localName(key: string): string {
+  const idx = key.indexOf(":");
+  return idx >= 0 ? key.slice(idx + 1) : key;
+}
+
+function findChild(obj: unknown, name: string): unknown {
+  if (obj === null || obj === undefined || typeof obj !== "object") return undefined;
+  const rec = obj as Record<string, unknown>;
+  if (name in rec) return rec[name];
+  for (const key of Object.keys(rec)) {
+    if (localName(key) === name) return rec[key];
+  }
+  return undefined;
+}
+
 function getFirstDocumentLine(document: Record<string, unknown>): unknown {
-  const line = document["cac:InvoiceLine"] ?? document["cac:DebitNoteLine"];
+  const line = findChild(document, "InvoiceLine") ?? findChild(document, "DebitNoteLine");
   return Array.isArray(line) ? line[0] : line;
 }
 
@@ -122,8 +140,8 @@ function getDocumentTypeFallback(parsed: Record<string, unknown>, document: Reco
   }
 
   return (
-    getStringValue(document["cbc:CreditNoteTypeCode"]) ??
-    getStringValue(document["cbc:DebitNoteTypeCode"]) ??
+    getStringValue(findChild(document, "CreditNoteTypeCode")) ??
+    getStringValue(findChild(document, "DebitNoteTypeCode")) ??
     findNodeValue(parsed, ["CreditNoteTypeCode", "cbc:CreditNoteTypeCode", "DebitNoteTypeCode", "cbc:DebitNoteTypeCode"])
   );
 }
@@ -145,8 +163,8 @@ function parseAmount(raw: string | undefined): number | undefined {
 function getPath(obj: unknown, path: string[]): unknown {
   let current = obj;
   for (const key of path) {
-    if (current === null || current === undefined || typeof current !== "object") return undefined;
-    current = (current as Record<string, unknown>)[key];
+    current = findChild(current, localName(key));
+    if (current === undefined) return undefined;
   }
   return current;
 }
@@ -209,7 +227,7 @@ function recursiveFind(value: unknown, keys: Set<string>): unknown {
 
   const obj = value as Record<string, unknown>;
   for (const [key, node] of Object.entries(obj)) {
-    if (keys.has(key)) {
+    if (keys.has(key) || keys.has(localName(key))) {
       if (typeof node === "string" || typeof node === "number") {
         return node;
       }

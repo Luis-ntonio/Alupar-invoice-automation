@@ -435,7 +435,85 @@
     @media (max-width: 930px) {
       .hero-grid { grid-template-columns: 1fr; }
     }
+
+    .cost-layout {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .cost-chart-wrap {
+      height: 360px;
+      position: relative;
+    }
+
+    .cost-detail {
+      background: var(--card-2);
+      border: 1px solid rgba(90, 157, 255, 0.22);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .cost-detail h3 {
+      font-size: 1.05rem;
+      color: #f0f4ff;
+      margin-bottom: 2px;
+    }
+
+    .cost-detail .cost-case {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      color: var(--cyan);
+      margin-bottom: 12px;
+    }
+
+    .cost-block {
+      border-top: 1px solid var(--line);
+      padding: 10px 0;
+    }
+
+    .cost-block:first-of-type {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .cost-block b {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+
+    .cost-block span, .cost-block ul {
+      color: #d8e3ff;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: "Space Grotesk", sans-serif;
+    }
+
+    .cost-block ul {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: "Manrope", sans-serif;
+      color: #c4d2f0;
+    }
+
+    .cost-block ul li {
+      margin-bottom: 2px;
+    }
+
+    @media (max-width: 800px) {
+      .cost-layout { grid-template-columns: 1fr; }
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header class="top">
@@ -452,6 +530,7 @@
         <a href="#carga-masiva">Carga masiva</a>
         <a href="#correos">Correos</a>
         <a href="#herramientas">Herramientas</a>
+        <a href="#costos-nube">Costos de nube</a>
         <a href="#cronograma">Cronograma</a>
       </nav>
     </div>
@@ -472,7 +551,7 @@
             <span class="chip">Login de acceso a plataforma</span>
             <span class="chip">Outlook + Workato</span>
             <span class="chip">XML UBL 2.1 + ZIP + PDF</span>
-            <span class="chip">Google Cloud + Firestore</span>
+            <span class="chip">Microsoft Azure + Cosmos DB</span>
             <span class="chip">Panel web en tiempo real</span>
             <span class="chip">Prevalidacion de montos con COES</span>
             <span class="chip">Carga masiva por carpetas</span>
@@ -572,8 +651,8 @@
           <p>Escucha activa en Outlook, filtros de captura y extraccion de metadatos de correo.</p>
         </article>
         <article class="card scope">
-          <h3>Implementacion en Google Cloud</h3>
-          <p>Base de datos, procesamiento de XML/PDF/ZIP, validacion SUNAT y almacenamiento seguro.</p>
+          <h3>Implementacion en Microsoft Azure</h3>
+          <p>Container Apps, Cosmos DB y Blob Storage para procesamiento de XML/PDF/ZIP, validacion SUNAT y almacenamiento seguro.</p>
         </article>
         <article class="card scope">
           <h3>Panel web de usuario</h3>
@@ -624,16 +703,27 @@
     <section id="prevalidacion-coes" class="fade">
       <div class="section-head">
         <h2 class="section-title">Prevalidacion de COES</h2>
-        <p class="section-sub">Se incorpora una conexion para contrastar montos de factura con lo estipulado en COES antes de la derivacion.</p>
+        <p class="section-sub">Se incorpora una conexion automatica para descargar las liquidaciones mensuales de COES (VTEA y VTP) y contrastar los montos de cada factura antes de la derivacion, sin intervencion manual.</p>
       </div>
-      <div class="panel grid">
+      <div class="panel flow">
+        <article class="step"><div class="step-index">1</div><div><p class="step-title">Deteccion del tipo de cargo</p><p class="step-desc">El concepto extraido del XML se analiza para identificar si es un Peaje o una transferencia COES (Potencia = VTP, Energia = VTEA).</p></div></article>
+        <article class="step"><div class="step-index">2</div><div><p class="step-title">Descarga automatica mensual</p><p class="step-desc">Un proceso diario descarga los excels oficiales de COES para el mes vigente. Si COES aun no publico el mes actual, se usa el ultimo periodo ya disponible o se retrocede mes a mes hasta encontrar el mas reciente.</p></div></article>
+        <article class="step"><div class="step-index">3</div><div><p class="step-title">Indexacion por codigo de informe</p><p class="step-desc">Cada excel se identifica por su codigo de informe COES (ej. COES/D/DO/SME-INF-090-2026), el mismo que aparece en el concepto de la factura, para ubicar el archivo exacto del mes correspondiente.</p></div></article>
+        <article class="step"><div class="step-index">4</div><div><p class="step-title">Cruce de montos por RUC</p><p class="step-desc">El sistema reconstruye la matriz completa de pagos (las planillas de COES vienen partidas en varios bloques apilados para impresion) y ubica el cruce entre el RUC de Alupar (La Virgen) y el RUC del proveedor, en cualquiera de los dos sentidos: Alupar emite la factura (cobra) o a Alupar le facturan (paga).</p></div></article>
+        <article class="step"><div class="step-index">5</div><div><p class="step-title">Resultado sin bloquear el flujo</p><p class="step-desc">El resultado (validado, no coincide, no encontrado) queda visible en una columna del tablero; nunca detiene el procesamiento del documento, solo lo marca para revision si hace falta.</p></div></article>
+      </div>
+      <div class="panel grid" style="margin-top:10px">
         <article class="card scope">
-          <h3>Conexion de contraste</h3>
-          <p>El sistema consulta COES y compara los montos reportados en la factura.</p>
+          <h3>Vista dedicada COES</h3>
+          <p>Pagina propia del panel con resumen horizontal de las contrapartes de Alupar (nombre, RUC, monto) agrupadas segun si Alupar cobra o paga, mas un grafico de barras comparativo por empresa.</p>
         </article>
         <article class="card scope">
-          <h3>Control previo</h3>
-          <p>La validacion se ejecuta antes de la clasificacion final del documento.</p>
+          <h3>Verificador manual</h3>
+          <p>Permite elegir dataset (VTEA/VTP) y periodo, ingresar un RUC y un monto, y validar el cruce a mano contra la matriz oficial de COES sin depender del flujo automatico.</p>
+        </article>
+        <article class="card scope">
+          <h3>Multiples bloques, una sola tabla</h3>
+          <p>Las planillas de COES dividen una tabla unica en varios tramos apilados para que entre en una pagina impresa; el sistema los reconstruye automaticamente en una sola matriz antes de validar.</p>
         </article>
       </div>
     </section>
@@ -692,10 +782,29 @@
       <div class="panel tools">
         <article class="tool"><img src="img/microsoft.webp" alt="Outlook"><div><b>Outlook</b><span>Canal de entrada de facturas y comprobantes.</span></div></article>
         <article class="tool"><img src="img/workato.png" alt="Workato"><div><b>Workato</b><span>Escucha activa y orquestacion de captura.</span></div></article>
-        <article class="tool"><img src="img/Google-Cloud.png" alt="Google Cloud"><div><b>Google Cloud</b><span>Procesamiento, escalado y despliegue del sistema.</span></div></article>
-        <article class="tool"><img src="img/firebase.png" alt="Firestore"><div><b>Firestore</b><span>Base de datos de documentos y estados.</span></div></article>
+        <article class="tool"><img src="img/microsoft.webp" alt="Microsoft Azure"><div><b>Azure Container Apps</b><span>Procesamiento, escalado y despliegue del backend.</span></div></article>
+        <article class="tool"><img src="img/microsoft.webp" alt="Azure Cosmos DB"><div><b>Azure Cosmos DB</b><span>Base de datos de documentos y estados.</span></div></article>
+        <article class="tool"><img src="img/microsoft.webp" alt="Azure Blob Storage"><div><b>Azure Blob Storage</b><span>Almacenamiento de PDFs, XML y excels de COES.</span></div></article>
+        <article class="tool"><img src="img/microsoft.webp" alt="Microsoft Entra ID"><div><b>Microsoft Entra ID</b><span>Autenticacion y control de acceso al panel (login corporativo).</span></div></article>
         <article class="tool"><img src="img/sunat.webp" alt="SUNAT"><div><b>SUNAT</b><span>Validacion fiscal en tiempo real del comprobante.</span></div></article>
-        <article class="tool"><img src="img/google-sheets.webp" alt="Google Sheets"><div><b>Google Sheets</b><span>Exportacion opcional para analisis y respaldo.</span></div></article>
+        <article class="tool"><div><b>COES</b><span>Liquidaciones VTEA/VTP descargadas mensualmente para contrastar montos.</span></div></article>
+      </div>
+    </section>
+
+    <section id="costos-nube" class="fade">
+      <div class="section-head">
+        <h2 class="section-title">Estimado de costos de infraestructura (200 facturas/mes)</h2>
+        <p class="section-sub">
+          Comparativa referencial de costo mensual de nube para este volumen de procesamiento (bajo trafico, picos cortos al recibir correos).
+          Son estimados basados en tarifas publicas de cada proveedor, no una cotizacion formal; el costo real depende del uso exacto y puede variar.
+          Pasa el cursor sobre una barra para ver el detalle, o haz click para fijarlo abajo.
+        </p>
+      </div>
+      <div class="panel cost-layout">
+        <div class="cost-chart-wrap">
+          <canvas id="cloudCostChart"></canvas>
+        </div>
+        <div class="cost-detail" id="costDetail"></div>
       </div>
     </section>
 
@@ -723,6 +832,186 @@
     }, { threshold: 0.1 });
 
     document.querySelectorAll(".fade").forEach((el) => io.observe(el));
+
+    // --- Comparativa de costos de nube (200 facturas/mes) ----------------------
+    const CLOUD_COST_DATA = {
+      azure: {
+        label: "Microsoft Azure",
+        color: "#4fd7ff",
+        cases: {
+          best: {
+            label: "Best case",
+            facturas: "200/mes",
+            monthly: 12,
+            annual: 144,
+            tools: ["Container Apps (escala a cero)", "Cosmos DB serverless", "Blob Storage", "Microsoft Entra ID"],
+          },
+          normal: {
+            label: "Normal case",
+            facturas: "200/mes",
+            monthly: 30,
+            annual: 360,
+            tools: ["Container Apps (1 instancia activa)", "Cosmos DB serverless", "Blob Storage", "Microsoft Entra ID"],
+          },
+          worst: {
+            label: "Worst case",
+            facturas: "200/mes + picos",
+            monthly: 55,
+            annual: 660,
+            tools: ["Container Apps (autoescalado + picos)", "Cosmos DB (mayor RU)", "Blob Storage + logs", "Microsoft Entra ID P1"],
+          },
+        },
+      },
+      gcp: {
+        label: "Google Cloud",
+        color: "#ff5a2a",
+        cases: {
+          best: {
+            label: "Best case",
+            facturas: "200/mes",
+            monthly: 5,
+            annual: 60,
+            tools: ["Cloud Run (escala a cero)", "Firestore (capa gratuita)", "Cloud Storage", "Identity Platform"],
+          },
+          normal: {
+            label: "Normal case",
+            facturas: "200/mes",
+            monthly: 10,
+            annual: 120,
+            tools: ["Cloud Run (min instances)", "Firestore", "Cloud Storage", "Identity Platform"],
+          },
+          worst: {
+            label: "Worst case",
+            facturas: "200/mes + picos",
+            monthly: 25,
+            annual: 300,
+            tools: ["Cloud Run (siempre activo)", "Firestore (mayor lectura/escritura)", "Cloud Storage + egress", "Identity Platform (tier pago)"],
+          },
+        },
+      },
+      aws: {
+        label: "Amazon Web Services",
+        color: "#a855f7",
+        cases: {
+          best: {
+            label: "Best case",
+            facturas: "200/mes",
+            monthly: 6,
+            annual: 72,
+            tools: ["Lambda + API Gateway", "DynamoDB on-demand", "S3", "Cognito (capa gratuita)"],
+          },
+          normal: {
+            label: "Normal case",
+            facturas: "200/mes",
+            monthly: 12,
+            annual: 144,
+            tools: ["Lambda + API Gateway / Fargate minimo", "DynamoDB on-demand", "S3", "Cognito"],
+          },
+          worst: {
+            label: "Worst case",
+            facturas: "200/mes + picos",
+            monthly: 30,
+            annual: 360,
+            tools: ["Fargate (siempre activo)", "DynamoDB (capacidad provisionada)", "S3 + transferencia", "Cognito (tier pago)"],
+          },
+        },
+      },
+    };
+
+    const CASE_KEYS = ["best", "normal", "worst"];
+    const CASE_COLORS = { best: "#39e7c4", normal: "#5a9dff", worst: "#ff5f6d" };
+    const PROVIDER_KEYS = ["azure", "gcp", "aws"];
+
+    function renderCostDetail(providerKey, caseKey) {
+      const provider = CLOUD_COST_DATA[providerKey];
+      const data = provider.cases[caseKey];
+      const detail = document.getElementById("costDetail");
+      detail.innerHTML = `
+        <h3>${provider.label}</h3>
+        <p class="cost-case" style="color:${CASE_COLORS[caseKey]}">${data.label}</p>
+        <div class="cost-block">
+          <b>Facturas estimadas</b>
+          <span>${data.facturas}</span>
+        </div>
+        <div class="cost-block">
+          <b>Precio mensual / anual</b>
+          <span>USD ${data.monthly}/mes &nbsp;&middot;&nbsp; USD ${data.annual}/año</span>
+        </div>
+        <div class="cost-block">
+          <b>Herramientas usadas</b>
+          <ul>${data.tools.map((t) => `<li>${t}</li>`).join("")}</ul>
+        </div>
+      `;
+    }
+
+    function buildCloudCostChart() {
+      const canvas = document.getElementById("cloudCostChart");
+      if (!canvas || typeof Chart === "undefined") return;
+
+      const datasets = CASE_KEYS.map((caseKey) => ({
+        label: CLOUD_COST_DATA.azure.cases[caseKey].label,
+        data: PROVIDER_KEYS.map((p) => CLOUD_COST_DATA[p].cases[caseKey].monthly),
+        backgroundColor: CASE_COLORS[caseKey],
+        borderRadius: 6,
+        caseKey,
+      }));
+
+      const chart = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: PROVIDER_KEYS.map((p) => CLOUD_COST_DATA[p].label),
+          datasets,
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: (evt) => {
+            const points = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, true);
+            if (!points.length) return;
+            const point = points[0];
+            const providerKey = PROVIDER_KEYS[point.index];
+            const caseKey = datasets[point.datasetIndex].caseKey;
+            renderCostDetail(providerKey, caseKey);
+          },
+          plugins: {
+            legend: {
+              labels: { color: "#c7d8f7", font: { size: 12 } },
+            },
+            tooltip: {
+              backgroundColor: "rgba(8, 14, 28, 0.96)",
+              titleColor: "#eef4ff",
+              bodyColor: "#d6e8ff",
+              borderColor: "rgba(79, 215, 255, 0.25)",
+              borderWidth: 1,
+              padding: 12,
+              callbacks: {
+                label: (ctx) => {
+                  const providerKey = PROVIDER_KEYS[ctx.dataIndex];
+                  const caseKey = datasets[ctx.datasetIndex].caseKey;
+                  const data = CLOUD_COST_DATA[providerKey].cases[caseKey];
+                  return `${data.label}: USD ${data.monthly}/mes (USD ${data.annual}/año)`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { color: "rgba(79, 215, 255, 0.08)" },
+              ticks: { color: "#c7d8f7", font: { size: 12, weight: "600" } },
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(79, 215, 255, 0.08)" },
+              ticks: { color: "#c7d8f7", font: { size: 12 } },
+              title: { display: true, text: "USD / mes", color: "#dce8ff", font: { size: 12, weight: "600" } },
+            },
+          },
+        },
+      });
+    }
+
+    buildCloudCostChart();
+    renderCostDetail("azure", "normal");
   </script>
 </body>
 </html>

@@ -8,7 +8,7 @@ const conceptRules: Record<string, string[]> = {
   otros: []
 };
 
-function normalizeText(input: string): string {
+export function normalizeText(input: string): string {
   return input
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")

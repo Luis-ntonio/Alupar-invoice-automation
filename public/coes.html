@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>COES VTEA/VTP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-in wrap">
+        <a class="brand" href="index.html">SISTEMA AUTOMATIZADO DE FACTURAS <span class="tag-live"><span class="dot"></span>Panel operativo</span></a>
+        <nav class="menu">
+          <a href="index.html">Dashboard</a>
+          <a href="coes.html">COES VTEA/VTP</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap page-shell">
+      <section class="panel" id="verifyPanel">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-copy">
+              <span class="toolbar-title">Verificacion manual de cruce</span>
+              <span class="toolbar-subtitle">Selecciona dataset/periodo, ingresa el RUC del proveedor y el monto de la factura para validarlo contra la matriz.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="coes-controls">
+          <label class="coes-field">
+            <span>Dataset</span>
+            <select id="datasetSelect">
+              <option value="vtea">VTEA</option>
+              <option value="vtp">VTP</option>
+            </select>
+          </label>
+          <label class="coes-field">
+            <span>Periodo</span>
+            <select id="periodSelect"></select>
+          </label>
+          <label class="coes-field">
+            <span>RUC proveedor</span>
+            <input id="verifyRuc" type="text" placeholder="20XXXXXXXXX" />
+          </label>
+          <label class="coes-field">
+            <span>Monto factura</span>
+            <input id="verifyMonto" type="number" step="0.01" placeholder="0.00" />
+          </label>
+          <button id="verifyBtn" class="btn-primary" type="button">Verificar</button>
+        </div>
+
+        <p id="verifyResult" class="status-line"></p>
+      </section>
+
+      <section class="panel" id="coesPanel">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-copy">
+              <span class="toolbar-title">Resumen Alupar</span>
+              <span class="toolbar-subtitle">Solo las contrapartes donde Alupar (La Virgen) participa, para el dataset/periodo seleccionado arriba.</span>
+            </div>
+          </div>
+        </div>
+
+        <p id="matrixStatus" class="status-line"></p>
+
+        <div id="aluparCards"></div>
+      </section>
+
+      <section class="panel" id="aluparChartPanel">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-copy">
+              <span class="toolbar-title">Montos por empresa</span>
+              <span class="toolbar-subtitle">Comparativo de montos de las contrapartes de Alupar en el periodo seleccionado.</span>
+            </div>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height: 360px">
+          <canvas id="aluparChart"></canvas>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+    <script src="auth.js"></script>
+    <script src="coes.js"></script>
+  </body>
+</html>

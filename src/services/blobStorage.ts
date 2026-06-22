@@ -67,6 +67,15 @@ export class BlobStorageService {
     return this.saveAtPath(buffer, target);
   }
 
+  async readBuffer(storagePath: string): Promise<Buffer> {
+    const stream = await this.openReadStream(storagePath);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
   async openReadStream(storagePath: string): Promise<Readable> {
     if (config.storageMode === "azure") {
       const container = await this.getContainerClient(config.azureStorageContainerRaw);

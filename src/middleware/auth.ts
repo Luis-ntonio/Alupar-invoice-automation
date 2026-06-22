@@ -55,12 +55,24 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     token,
     getKey,
     {
-      audience: `api://${config.azureAdClientId}`,
+      // Azure AD puede emitir el aud como "api://{clientId}" o como el GUID
+      // pelado, segun como se resuelva el recurso al momento de emitir el
+      // token v2.0 (mismo App Registration, ambas formas son validas).
+      audience: [`api://${config.azureAdClientId}`, config.azureAdClientId],
       issuer: `https://login.microsoftonline.com/${config.azureAdTenantId}/v2.0`,
       algorithms: ["RS256"],
     },
     (err, decoded) => {
       if (err) {
+        const unverified = jwt.decode(token) as jwt.JwtPayload | null;
+        console.warn("[auth] jwt.verify fallo:", err.name, err.message, {
+          expectedAudience: `api://${config.azureAdClientId}`,
+          expectedIssuer: `https://login.microsoftonline.com/${config.azureAdTenantId}/v2.0`,
+          actualAudience: unverified?.aud,
+          actualIssuer: unverified?.iss,
+          actualVersion: (unverified as any)?.ver,
+          actualTid: (unverified as any)?.tid,
+        });
         res.status(401).json({ error: "Token invalido o expirado." });
         return;
       }
