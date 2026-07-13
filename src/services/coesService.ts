@@ -200,8 +200,16 @@ function datasetConfig(dataset: CoesDataset): CoesDatasetConfig {
 	return found;
 }
 
-function buildRemotePath(basePath: string, period: CoesSyncPeriod, fileName: string): string {
-	return `${basePath}/${period.year}/${monthFolderName(period.month)}/Mensual/${fileName}`;
+// COES no es consistente con la subcarpeta "Mensual": algunos periodos publican
+// el archivo en ".../06_Junio/Mensual/archivo.xlsx" y otros directamente en
+// ".../06_Junio/archivo.xlsx" (visto en el VTP de junio 2026). Se devuelven ambas
+// variantes como candidatas y la descarga usa la primera que exista.
+function buildRemotePaths(basePath: string, period: CoesSyncPeriod, fileName: string): string[] {
+	const monthFolder = `${basePath}/${period.year}/${monthFolderName(period.month)}`;
+	return [
+		`${monthFolder}/Mensual/${fileName}`,
+		`${monthFolder}/${fileName}`,
+	];
 }
 
 function buildRemoteUrl(remotePath: string): string {
@@ -253,7 +261,10 @@ export async function syncCoesMonthlyDataset(
 ): Promise<CoesDownloadResult> {
 	const cfg = datasetConfig(dataset);
 	const fileName = cfg.fileName(period.year, period.month);
-	const remotePath = buildRemotePath(cfg.basePath, period, fileName);
+	const candidatePaths = buildRemotePaths(cfg.basePath, period, fileName);
+	// La primera candidata (con "Mensual/") se usa como representativa para los
+	// resultados already_exists / not_available.
+	const remotePath = candidatePaths[0];
 	const remoteUrl = buildRemoteUrl(remotePath);
 
 	const expectedStoragePath = getExpectedStoragePath(dataset, period);
@@ -273,7 +284,22 @@ export async function syncCoesMonthlyDataset(
 		};
 	}
 
-	const buffer = await fetchCoesFile(remoteUrl);
+	// Se prueba cada variante de ruta (con y sin "Mensual/") y se usa la primera
+	// que devuelva un archivo valido.
+	let buffer: Buffer | null = null;
+	let resolvedRemotePath = remotePath;
+	let resolvedRemoteUrl = remoteUrl;
+	for (const candidate of candidatePaths) {
+		const candidateUrl = buildRemoteUrl(candidate);
+		const candidateBuffer = await fetchCoesFile(candidateUrl);
+		if (candidateBuffer) {
+			buffer = candidateBuffer;
+			resolvedRemotePath = candidate;
+			resolvedRemoteUrl = candidateUrl;
+			break;
+		}
+	}
+
 	if (!buffer) {
 		return {
 			status: "not_available",
@@ -293,8 +319,8 @@ export async function syncCoesMonthlyDataset(
 		dataset,
 		period,
 		fileName,
-		remotePath,
-		remoteUrl,
+		remotePath: resolvedRemotePath,
+		remoteUrl: resolvedRemoteUrl,
 		storagePath,
 	};
 }
@@ -362,29 +388,26 @@ async function syncDatasetWithFallback(
 	};
 
 	const currentPeriod = toPeriod(now);
-	const currentResult = await tryPeriod(currentPeriod);
-	if (currentResult.status === "downloaded" || currentResult.status === "already_exists") {
-		return { attempts, selected: currentResult };
-	}
-
 	const latestStored = await findLatestStoredPeriod(dataset, blobStorage);
-	if (latestStored && !tried.has(periodKey(latestStored))) {
-		const storedResult = await tryPeriod(latestStored);
-		if (storedResult.status === "downloaded" || storedResult.status === "already_exists") {
-			return { attempts, selected: storedResult };
-		}
-	}
 
-	if (!latestStored) {
-		let cursor = currentPeriod;
-		for (let i = 0; i < MAX_LOOKBACK_MONTHS; i++) {
-			cursor = shiftPeriod(cursor, -1);
-			if (tried.has(periodKey(cursor))) continue;
+	// Se recorre mes a mes hacia atras desde el mes actual y se toma el primer
+	// periodo disponible en COES (el mas reciente). Antes se saltaba directo del mes
+	// actual al ultimo mes ya almacenado, lo que dejaba sin descargar los meses
+	// publicados en el medio (ej. tener mayo guardado y no bajar junio porque julio
+	// aun no esta publicado). El recorrido se detiene al llegar al ultimo periodo ya
+	// almacenado (no hay nada mas nuevo que buscar por debajo) o en MAX_LOOKBACK_MONTHS.
+	let cursor = currentPeriod;
+	for (let i = 0; i <= MAX_LOOKBACK_MONTHS; i++) {
+		if (!tried.has(periodKey(cursor))) {
 			const result = await tryPeriod(cursor);
 			if (result.status === "downloaded" || result.status === "already_exists") {
 				return { attempts, selected: result };
 			}
 		}
+		if (latestStored && periodKey(cursor) === periodKey(latestStored)) {
+			break;
+		}
+		cursor = shiftPeriod(cursor, -1);
 	}
 
 	return { attempts, selected: undefined };

@@ -97,6 +97,23 @@ $revisionTag = ("rev-" + (($ImageTag.ToLower() -replace "[^a-z0-9-]", "-").Trim(
 if ([string]::IsNullOrWhiteSpace($revisionTag)) { $revisionTag = "rev-1" }
 $yamlPath = Join-Path $env:TEMP "$ContainerAppName-aca.yaml"
 
+# Variables de Entra ID / allow-list son opcionales. Container Apps rechaza una env
+# var con "value:" vacio ("must have either value or a secretRef"), asi que se emiten
+# SOLO las que tengan valor; las vacias se omiten en vez de generar YAML invalido.
+$optionalEnvPairs = @(
+  @{ name = "AZURE_AD_TENANT_ID";         value = $AzureAdTenantId },
+  @{ name = "AZURE_AD_CLIENT_ID";         value = $AzureAdClientId },
+  @{ name = "AZURE_AD_FRONTEND_CLIENT_ID"; value = $AzureAdFrontendClientId },
+  @{ name = "ALLOWED_DOMAINS";            value = $AllowedDomains },
+  @{ name = "ALLOWED_EMAILS";             value = $AllowedEmails }
+)
+$optionalEnvLines = foreach ($p in $optionalEnvPairs) {
+  if (-not [string]::IsNullOrWhiteSpace($p.value)) {
+    "          - name: $($p.name)`n            value: `"$($p.value)`""
+  }
+}
+$optionalEnv = ($optionalEnvLines -join "`n")
+
 $yaml = @"
 location: $Location
 name: $ContainerAppName
@@ -158,16 +175,7 @@ properties:
             secretRef: workato-secret
           - name: ENABLE_WORKATO_REMOTE_URLS
             value: "$enableRemote"
-          - name: AZURE_AD_TENANT_ID
-            value: $AzureAdTenantId
-          - name: AZURE_AD_CLIENT_ID
-            value: $AzureAdClientId
-          - name: AZURE_AD_FRONTEND_CLIENT_ID
-            value: $AzureAdFrontendClientId
-          - name: ALLOWED_DOMAINS
-            value: $AllowedDomains
-          - name: ALLOWED_EMAILS
-            value: $AllowedEmails
+$optionalEnv
     scale:
       minReplicas: 1
       maxReplicas: 1

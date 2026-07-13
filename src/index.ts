@@ -14,9 +14,23 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
-app.use(express.static(path.resolve("public")));
+
+// Los estaticos (renderer.js, styles.css, index.html) cambian en cada deploy.
+// "no-cache" permite que el navegador los cachee pero lo obliga a revalidar via
+// ETag antes de usarlos, de modo que tras un deploy siempre baja la version nueva
+// sin requerir recarga forzada del usuario.
+app.use(
+  express.static(path.resolve("public"), {
+    setHeaders: (res, filePath) => {
+      if (/\.(html|js|css)$/i.test(filePath)) {
+        res.setHeader("Cache-Control", "no-cache");
+      }
+    },
+  })
+);
 
 app.get("*", (_req, res) => {
+  res.setHeader("Cache-Control", "no-cache");
   res.sendFile(path.resolve("public/index.html"));
 });
 
