@@ -153,6 +153,28 @@ function inferFilenameFromUrl(fileUrl: string): string {
   }
 }
 
+// Detecta respuestas que NO son el archivo esperado sino una pagina HTML: el
+// login/redireccion de un portal, o el propio SPA del dashboard servido por el
+// fallback catch-all (app.get("*") -> index.html) cuando la URL apunta a este
+// mismo servicio. Sin esto, ese HTML se guardaba como .pdf y se abria en blanco.
+// Devuelve un mensaje de error si el contenido es invalido, o null si es valido.
+function validateRemoteFileContent(buffer: Buffer, contentType: string, originalname: string): string | null {
+  const head = buffer.subarray(0, 512).toString("latin1").trimStart().toLowerCase();
+  const isXmlHead = head.startsWith("<?xml") || head.startsWith("<invoice") || head.startsWith("<creditnote") || head.startsWith("<debitnote");
+  const looksHtml = head.startsWith("<!doctype html") || head.startsWith("<html") || head.includes("<head") || head.includes("<body");
+  const htmlByHeader = contentType.toLowerCase().includes("text/html") && !isXmlHead;
+  if (looksHtml || htmlByHeader) {
+    return "la URL devolvio una pagina HTML (login/redireccion del portal o el SPA del dashboard), no el archivo binario";
+  }
+  // Si el archivo dice ser PDF (por nombre o content-type), exigir la firma %PDF.
+  const claimsPdf = originalname.toLowerCase().endsWith(".pdf") || contentType.toLowerCase().includes("pdf");
+  const isPdf = buffer.length >= 4 && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46;
+  if (claimsPdf && !isPdf) {
+    return "el contenido no empieza con la firma %PDF (PDF invalido o truncado)";
+  }
+  return null;
+}
+
 async function downloadWorkatoRemoteFile(ref: WorkatoRemoteFileRef): Promise<Express.Multer.File | null> {
   const timeoutMs = 30000;
   const controller = new AbortController();
@@ -169,8 +191,18 @@ async function downloadWorkatoRemoteFile(ref: WorkatoRemoteFileRef): Promise<Exp
       console.warn(`[downloadWorkatoRemoteFile] Archivo vacío descargado desde ${ref.url}`);
       return null;
     }
-    const mimeType = ref.mimetype || response.headers.get("content-type")?.split(";")[0] || "application/octet-stream";
+    const responseContentType = response.headers.get("content-type") ?? "";
+    const mimeType = ref.mimetype || responseContentType.split(";")[0] || "application/octet-stream";
     const originalname = ref.originalname || inferFilenameFromUrl(response.url || ref.url);
+    const contentError = validateRemoteFileContent(buffer, responseContentType, originalname);
+    if (contentError) {
+      const snippet = buffer.subarray(0, 200).toString("latin1").replace(/\s+/g, " ").trim();
+      console.warn(
+        `[downloadWorkatoRemoteFile] Descarga rechazada (${originalname}): ${contentError}. ` +
+        `url=${ref.url} urlFinal=${response.url} status=${response.status} content-type="${responseContentType}" inicio="${snippet}"`
+      );
+      return null;
+    }
     console.log(`[downloadWorkatoRemoteFile] OK ${originalname} (${mimeType}, ${buffer.length}B)`);
     return makeWorkatoFile(originalname, mimeType, buffer);
   } catch (err) {
