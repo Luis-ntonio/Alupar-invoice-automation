@@ -20,6 +20,7 @@ interface Expected {
   fechaEmision: string;
   moneda: string;
   emisor?: string; // se valida solo si se especifica
+  fechaVencimiento?: string; // se valida solo si se especifica
 }
 
 const MONTO_TOLERANCE = 0.01;
@@ -36,6 +37,10 @@ const EXPECTED: Record<string, Expected> = {
   "20600217721-08-FD01-1110.xml": { documentType: "nota", ruc: "20600217721", monto: 54.91, fechaEmision: "2026-07-10", moneda: "PEN" },
   "20601053391-01-FF02-1523.xml": { documentType: "factura", ruc: "20601053391", monto: 991.55, fechaEmision: "2026-07-10", moneda: "PEN" },
   "20608552171-01-F111-4145.xml": { documentType: "factura", ruc: "20608552171", monto: 7080.0, fechaEmision: "2026-07-09", moneda: "USD", emisor: "UNACEM PERU SA" },
+  // Notas cuya fecha de vencimiento vive en cac:PaymentTerms/cbc:PaymentDueDate
+  // (no hay cbc:DueDate a nivel documento) — regresion del fallback de vencimiento.
+  "20102708394-07-F528-00000522.xml": { documentType: "nota", ruc: "20102708394", monto: 1274.15, fechaEmision: "2026-07-10", moneda: "PEN", fechaVencimiento: "2026-07-25" },
+  "20600217721-08-FD01-1110 (1).xml": { documentType: "nota", ruc: "20600217721", monto: 54.91, fechaEmision: "2026-07-10", moneda: "PEN", fechaVencimiento: "2026-07-25" },
 };
 
 async function main(): Promise<void> {
@@ -74,6 +79,9 @@ async function main(): Promise<void> {
     if ((extracted.moneda ?? "") !== expected.moneda) errors.push(`moneda: "${extracted.moneda ?? ""}" != "${expected.moneda}"`);
     if (expected.emisor !== undefined && (extracted.emisor ?? "") !== expected.emisor) {
       errors.push(`emisor: "${extracted.emisor ?? ""}" != "${expected.emisor}"`);
+    }
+    if (expected.fechaVencimiento !== undefined && (extracted.fechaVencimiento ?? "") !== expected.fechaVencimiento) {
+      errors.push(`fechaVencimiento: "${extracted.fechaVencimiento ?? ""}" != "${expected.fechaVencimiento}"`);
     }
 
     if (errors.length === 0) {

@@ -79,7 +79,11 @@ async function extractFromXml(buffer) {
     return {
         numeroDocumento: getStringValue(findChild(document, "ID")) ?? findNodeValue(parsed, ["ID", "cbc:ID"]),
         fechaEmision: getStringValue(findChild(document, "IssueDate")) ?? findNodeValue(parsed, ["IssueDate", "cbc:IssueDate"]),
-        fechaVencimiento: getStringValue(findChild(document, "DueDate")) ?? findNodeValue(parsed, ["DueDate", "cbc:DueDate"]),
+        // Prioridad: cbc:DueDate a nivel documento. Si no existe (comun en notas),
+        // se cae al cbc:PaymentDueDate de la primera cuota dentro de cac:PaymentTerms.
+        fechaVencimiento: getStringValue(findChild(document, "DueDate")) ??
+            findNodeValue(parsed, ["DueDate", "cbc:DueDate"]) ??
+            findNodeValue(parsed, ["PaymentDueDate", "cbc:PaymentDueDate"]),
         moneda: findNodeValue(parsed, ["DocumentCurrencyCode", "cbc:DocumentCurrencyCode", "moneda"]),
         monto,
         emisor,
