@@ -768,6 +768,18 @@ function isSunatCdr(buffer: Buffer): boolean {
   return /<(?:\w+:)?ApplicationResponse[\s>]/.test(head);
 }
 
+// Detecta emisores tipo fideicomiso. El texto real en el XML suele ser
+// "FIDEICOMETIDO" dentro del nombre del emisor (ej. "PATRIMONIO FIDEICOMETIDO -
+// SCOTIABANK - REDESUR Y TESUR..."); el prefijo comun "fideicom" cubre tanto
+// "fideicomiso" como "fideicometido". Fuente: emisor + snippet del XML.
+function detectFideicomiso(extracted: Record<string, unknown>): boolean {
+  const txt = [(extracted as any).emisor, (extracted as any).rawTextSnippet]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return /fideicom/.test(txt);
+}
+
 async function processIntakeFiles(files: Express.Multer.File[], metadata: IncomingMetadata): Promise<IntakeSuccessResult | IntakeErrorResult> {
   if (metadata.messageId) {
     const existing = await repository.findByMessageId(metadata.messageId);
@@ -886,6 +898,7 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
     concept,
     empresa: (extracted as any).emisor ?? "",
     centroCostos,
+    fideicomiso: detectFideicomiso(extracted),
     ruc: (extracted as any).ruc ?? "",
     sunatValidacion,
     coesValidacion: centroCostosResult.coesValidacion,
@@ -1162,6 +1175,7 @@ const updateDocumentSchema = z.object({
   empresa: z.string().trim().min(1).optional(),
   documentType: z.enum(["factura", "comprobante", "nota", "desconocido"]).optional(),
   centroCostos: z.string().trim().min(1).optional(),
+  fideicomiso: z.boolean().optional(),
   monto: z.number().finite().nonnegative().nullable().optional(),
   ruc: z.string().trim().optional(),
   concept: z.string().trim().optional(),
@@ -1188,6 +1202,7 @@ router.patch("/documents/:id", requireAuth, async (req, res) => {
     empresa: payload.empresa ?? current.empresa,
     documentType: payload.documentType ?? current.documentType,
     centroCostos: payload.centroCostos ?? current.centroCostos,
+    fideicomiso: payload.fideicomiso ?? current.fideicomiso,
     ruc: payload.ruc ?? current.ruc,
     concept: payload.concept ?? current.concept,
     extracted: {

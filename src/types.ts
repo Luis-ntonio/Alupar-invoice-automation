@@ -65,6 +65,7 @@ export interface EmailRecord {
   concept: string;
   empresa: string;
   centroCostos?: string;
+  fideicomiso?: boolean;
   ruc: string;
   sunatValidacion?: SunatValidacion;
   coesValidacion?: CoesValidacion;

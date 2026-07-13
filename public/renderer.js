@@ -30,7 +30,9 @@ const COLUMNS = [
   { key: "fechaVencimiento", label: "Fecha vencimiento" },
   { key: "empresa", label: "Empresa", editable: true },
   { key: "ruc", label: "RUC" },
+  { key: "codigoFactura", label: "Codigo de Factura", title: "Serie-numero del comprobante (usado en la validacion SUNAT)" },
   { key: "documentType", label: "Tipo Doc", editable: true },
+  { key: "fideicomiso", label: "Fideicomiso", editable: true, title: "Emisor tipo fideicomiso (detectado del XML)" },
   { key: "centroCostos", label: "Centro de costos", editable: true },
   { key: "coesValidacion", label: "Val. COES", title: "Validacion de monto COES (VTEA/VTP)" },
   { key: "concept", label: "Concepto" },
@@ -105,7 +107,9 @@ function getFilterValue(item, key) {
     case "fechaVencimiento": return formatDateOnly(item.extracted?.fechaVencimiento);
     case "empresa": return item.empresa || "-";
     case "ruc": return item.ruc || "-";
+    case "codigoFactura": return item.extracted?.numeroDocumento || "-";
     case "documentType": return item.documentType || "-";
+    case "fideicomiso": return item.fideicomiso ? "Sí" : "No";
     case "centroCostos": return item.centroCostos || "-";
     case "coesValidacion": return item.coesValidacion?.status || "-";
     case "concept": return item.concept || "-";
@@ -266,6 +270,9 @@ function cellForKey(item, key) {
   if (key === "documentType") {
     return `<span class="cell-display" data-edit-open="1" data-edit-field="documentType" data-id="${item.id}">${escHtml(item.documentType || "desconocido")}</span>`;
   }
+  if (key === "fideicomiso") {
+    return `<span class="cell-display" data-edit-open="1" data-edit-field="fideicomiso" data-id="${item.id}">${item.fideicomiso ? "Sí" : "No"}</span>`;
+  }
   if (key === "centroCostos") {
     // El centro de costos solo aplica a facturas; en el resto no es editable.
     if (item.documentType !== "factura") {
@@ -295,6 +302,13 @@ function buildEditorControl(doc, field) {
       .map((opt) => `<option value="${opt}" ${opt === current ? "selected" : ""}>${opt}</option>`)
       .join("");
     return `<select class="cell-input" data-edit-field="documentType" data-id="${doc.id}">${opts}</select>`;
+  }
+  if (field === "fideicomiso") {
+    const current = doc.fideicomiso ? "Sí" : "No";
+    const opts = ["Sí", "No"]
+      .map((opt) => `<option value="${opt}" ${opt === current ? "selected" : ""}>${opt}</option>`)
+      .join("");
+    return `<select class="cell-input" data-edit-field="fideicomiso" data-id="${doc.id}">${opts}</select>`;
   }
   if (field === "centroCostos") {
     const current = doc.centroCostos || "";
@@ -381,6 +395,13 @@ async function handleCellEditCommit(el) {
       return;
     }
     patch = { documentType: value };
+  } else if (field === "fideicomiso") {
+    const value = String(el.value || "No") === "Sí";
+    if (value === Boolean(doc.fideicomiso)) {
+      applyAndRender();
+      return;
+    }
+    patch = { fideicomiso: value };
   } else if (field === "centroCostos") {
     const value = String(el.value || "").trim();
     if (!value || value === (doc.centroCostos || "")) {
@@ -470,7 +491,9 @@ function renderRows(items) {
         <td>${cellForKey(item, "fechaVencimiento")}</td>
         <td>${cellForKey(item, "empresa")}</td>
         <td class="mono">${cellForKey(item, "ruc")}</td>
+        <td class="mono">${cellForKey(item, "codigoFactura")}</td>
         <td>${cellForKey(item, "documentType")}</td>
+        <td>${cellForKey(item, "fideicomiso")}</td>
         <td>${cellForKey(item, "centroCostos")}</td>
         <td title="${escHtml(item.coesValidacion?.detalle || "")}">${cellForKey(item, "coesValidacion")}</td>
         <td>${cellForKey(item, "concept")}</td>
@@ -885,12 +908,15 @@ function exportExcel() {
     "Fecha vencimiento": getDisplayValue(item, "fechaVencimiento"),
     Empresa: getDisplayValue(item, "empresa"),
     RUC: getDisplayValue(item, "ruc"),
+    "Codigo de Factura": getDisplayValue(item, "codigoFactura"),
     "Tipo Doc": getDisplayValue(item, "documentType"),
+    Fideicomiso: getDisplayValue(item, "fideicomiso"),
     "Centro de costos": getDisplayValue(item, "centroCostos"),
     "Val. COES": getDisplayValue(item, "coesValidacion"),
     Concepto: getDisplayValue(item, "concept"),
-    "Monto (IGV agregado 18%)": getDisplayValue(item, "monto"),
-    "Monto sin IGV": getDisplayValue(item, "montoSinIgv"),
+    Moneda: item.extracted?.moneda || "-",
+    "Monto (IGV agregado 18%)": item.extracted?.monto != null ? Number(item.extracted.monto) : "",
+    "Monto sin IGV": item.extracted?.monto != null ? Number((item.extracted.monto / 1.18).toFixed(2)) : "",
     "Est. CP": getDisplayValue(item, "estadoComprobante"),
     "Est. RUC": getDisplayValue(item, "estadoContribuyente"),
     Domicilio: getDisplayValue(item, "condicionDomicilio"),
