@@ -387,7 +387,11 @@ async function handleCellEditCommit(el) {
       applyAndRender();
       return;
     }
-    patch = { centroCostos: value };
+    // El concepto queda anexado al centro de costos: al elegir un centro, el
+    // concepto se fija al concepto oficial de ese centro (ver COST_CENTER_OPTIONS
+    // / "centro de costos.jpeg"), de modo que ambas columnas queden consistentes.
+    const opt = COST_CENTER_OPTIONS.find((o) => o.code === value);
+    patch = opt ? { centroCostos: value, concept: opt.concepto } : { centroCostos: value };
   } else if (field === "monto") {
     const raw = String(el.value || "").trim();
     if (!raw) {

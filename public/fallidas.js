@@ -126,6 +126,18 @@ fallidasList.addEventListener("click", (event) => {
   }
 });
 
+// El concepto queda anexado al centro de costos: al elegir un centro se
+// autocompleta el concepto oficial de ese centro (ver COST_CENTER_OPTIONS).
+fallidasList.addEventListener("change", (event) => {
+  const select = event.target.closest('select[name="centroCostos"]');
+  if (!select) return;
+  const form = select.closest("[data-form-id]");
+  const conceptInput = form && form.querySelector('input[name="concept"]');
+  if (!conceptInput) return;
+  const opt = COST_CENTER_OPTIONS.find((o) => o.code === select.value);
+  if (opt) conceptInput.value = opt.concepto;
+});
+
 fallidasList.addEventListener("submit", async (event) => {
   const form = event.target.closest("[data-form-id]");
   if (!form) return;
