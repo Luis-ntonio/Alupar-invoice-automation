@@ -8,15 +8,20 @@ let activeDropdown = null;
 let activeDropdownCol = null;
 let chartCompaniesMenuOpen = false;
 
+// Centros de costo oficiales (ver "centro de costos.jpeg"). El valor guardado es
+// el codigo; en el dropdown se muestra "codigo — concepto" para el operador.
+// Solo aplican a facturas; el centro de costo se deriva del concepto.
 const COST_CENTER_OPTIONS = [
-  "Peajes",
-  "COES-VTEA",
-  "COES-VTP",
-  "CC-004 Finanzas",
-  "CC-005 Logistica",
-  "CC-006 Proyectos",
-  "CC-007 Administracion",
-  "CC-008 TI",
+  { code: "004.1.6", concepto: "Ingreso Tarifario Red MAT SST & SCT" },
+  { code: "004.1.7", concepto: "Compensación por Ingreso Tarifario" },
+  { code: "004.1.8", concepto: "Liquidación del Peaje de Conexión SPT" },
+  { code: "004.1.9", concepto: "Valorización de Transferencias de Potencia" },
+  { code: "004.1.11", concepto: "Liquidación de SCIO" },
+  { code: "004.1.12", concepto: "Pagos SST GD REP" },
+  { code: "004.1.15", concepto: "Peaje por Área Demanda" },
+  { code: "004.1.16", concepto: "Peaje por Distribución" },
+  { code: "004.2.1", concepto: "Comercialización de Energía Activa" },
+  { code: "004.2.3", concepto: "Transferencia de Potencia Firme" },
 ];
 
 const COLUMNS = [
@@ -29,7 +34,8 @@ const COLUMNS = [
   { key: "centroCostos", label: "Centro de costos", editable: true },
   { key: "coesValidacion", label: "Val. COES", title: "Validacion de monto COES (VTEA/VTP)" },
   { key: "concept", label: "Concepto" },
-  { key: "monto", label: "Monto", editable: true },
+  { key: "monto", label: "Monto (IGV agregado 18%)", editable: true },
+  { key: "montoSinIgv", label: "Monto sin IGV" },
   { key: "estadoComprobante", label: "Est. CP", title: "Estado del Comprobante (SUNAT)" },
   { key: "estadoContribuyente", label: "Est. RUC", title: "Estado del Contribuyente (SUNAT)" },
   { key: "condicionDomicilio", label: "Domicilio", title: "Condicion de Domicilio (SUNAT)" },
@@ -58,6 +64,11 @@ const emailPreviewText = document.getElementById("emailPreviewText");
 const emailPreviewMeta = document.getElementById("emailPreviewMeta");
 const emailPreviewTitle = document.getElementById("emailPreviewTitle");
 const closeEmailPreviewBtn = document.getElementById("closeEmailPreviewBtn");
+const exportSelectionModal = document.getElementById("exportSelectionModal");
+const exportSelectionList = document.getElementById("exportSelectionList");
+const closeExportModalBtn = document.getElementById("closeExportModalBtn");
+const exportSelectionConfirmBtn = document.getElementById("exportSelectionConfirmBtn");
+const exportSelectionCancelBtn = document.getElementById("exportSelectionCancelBtn");
 
 // --- Helpers ----------------------------------------------------------------
 function parseDateOnly(raw) {
@@ -99,6 +110,7 @@ function getFilterValue(item, key) {
     case "coesValidacion": return item.coesValidacion?.status || "-";
     case "concept": return item.concept || "-";
     case "monto": return item.extracted?.monto != null ? Number(item.extracted.monto).toFixed(2) : "-";
+    case "montoSinIgv": return item.extracted?.monto != null ? (Number(item.extracted.monto) / 1.18).toFixed(2) : "-";
     case "estadoComprobante": return item.sunatValidacion?.estadoComprobante || "-";
     case "estadoContribuyente": return item.sunatValidacion?.estadoContribuyente || "-";
     case "condicionDomicilio": return item.sunatValidacion?.condicionDomicilio || "-";
@@ -107,13 +119,22 @@ function getFilterValue(item, key) {
   }
 }
 
+function formatMonto(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  return num.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function getDisplayValue(item, key) {
   switch (key) {
     case "fechaRecepcion": return formatIsoDateTime(item.metadata?.receivedAt || item.createdAt);
     case "fechaEmision": return formatDateOnly(item.extracted?.fechaEmision);
     case "fechaVencimiento": return formatDateOnly(item.extracted?.fechaVencimiento);
     case "monto": return item.extracted?.monto != null
-      ? `${Number(item.extracted.monto).toFixed(2)} ${item.extracted?.moneda || ""}`.trim()
+      ? `${formatMonto(item.extracted.monto)} ${item.extracted?.moneda || ""}`.trim()
+      : "-";
+    case "montoSinIgv": return item.extracted?.monto != null
+      ? `${formatMonto(item.extracted.monto / 1.18)} ${item.extracted?.moneda || ""}`.trim()
       : "-";
     default:
       return getFilterValue(item, key);
@@ -240,17 +261,25 @@ function refreshFilterIcons() {
 // --- Editable cells ----------------------------------------------------------
 function cellForKey(item, key) {
   if (key === "empresa") {
-    return `<span class="cell-display" data-edit-open="1" data-edit-field="empresa" data-id="${item.id}">${escHtml(item.empresa || "-")}</span>`;
+    return `<span class="cell-display cell-truncate" data-edit-open="1" data-edit-field="empresa" data-id="${item.id}" title="${escHtml(item.empresa || "-")}">${escHtml(item.empresa || "-")}</span>`;
   }
   if (key === "documentType") {
     return `<span class="cell-display" data-edit-open="1" data-edit-field="documentType" data-id="${item.id}">${escHtml(item.documentType || "desconocido")}</span>`;
   }
   if (key === "centroCostos") {
+    // El centro de costos solo aplica a facturas; en el resto no es editable.
+    if (item.documentType !== "factura") {
+      return `<span class="cell-display muted" title="El centro de costos solo aplica a facturas">N/A</span>`;
+    }
     return `<span class="cell-display" data-edit-open="1" data-edit-field="centroCostos" data-id="${item.id}">${escHtml(item.centroCostos || "Seleccionar...")}</span>`;
   }
   if (key === "monto") {
-    const value = item.extracted?.monto != null ? Number(item.extracted.monto).toFixed(2) : "-";
+    const value = item.extracted?.monto != null ? formatMonto(item.extracted.monto) : "-";
     return `<span class="cell-display mono" data-edit-open="1" data-edit-field="monto" data-id="${item.id}">${escHtml(value)}</span>`;
+  }
+  if (key === "concept") {
+    const value = getDisplayValue(item, key);
+    return `<span class="cell-truncate cell-expandable" data-expandable="1">${escHtml(value)}</span>`;
   }
   return escHtml(getDisplayValue(item, key));
 }
@@ -270,7 +299,12 @@ function buildEditorControl(doc, field) {
   if (field === "centroCostos") {
     const current = doc.centroCostos || "";
     const opts = [`<option value="" ${current ? "" : "selected"}>Seleccionar...</option>`]
-      .concat(COST_CENTER_OPTIONS.map((opt) => `<option value="${escHtml(opt)}" ${opt === current ? "selected" : ""}>${escHtml(opt)}</option>`))
+      .concat(
+        COST_CENTER_OPTIONS.map(
+          (opt) =>
+            `<option value="${escHtml(opt.code)}" ${opt.code === current ? "selected" : ""}>${escHtml(opt.code + " — " + opt.concepto)}</option>`
+        )
+      )
       .join("");
     return `<select class="cell-input" data-edit-field="centroCostos" data-id="${doc.id}">${opts}</select>`;
   }
@@ -298,6 +332,14 @@ function openCellEditor(buttonEl) {
   editor.focus();
   if (editor.tagName === "INPUT") {
     editor.select();
+  }
+}
+
+async function deleteDocument(id) {
+  const res = await authFetch(`/api/documents/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 204) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error || "No se pudo eliminar el documento.");
   }
 }
 
@@ -414,6 +456,7 @@ function renderRows(items) {
     const downloadAll = item.files?.length
       ? `<a class="btn-link" href="/api/documents/${item.id}/file" title="Descargar todos">↓</a>`
       : "";
+    const deleteButton = `<button class="btn-link btn-delete" type="button" data-delete-id="${item.id}" title="Eliminar registro" aria-label="Eliminar registro">✕</button>`;
 
     return `
       <tr>
@@ -428,11 +471,12 @@ function renderRows(items) {
         <td title="${escHtml(item.coesValidacion?.detalle || "")}">${cellForKey(item, "coesValidacion")}</td>
         <td>${cellForKey(item, "concept")}</td>
         <td class="mono">${cellForKey(item, "monto")}</td>
+        <td class="mono">${cellForKey(item, "montoSinIgv")}</td>
         <td class="sunat-cell">${cellForKey(item, "estadoComprobante")}</td>
         <td class="sunat-cell">${cellForKey(item, "estadoContribuyente")}</td>
         <td class="sunat-cell">${cellForKey(item, "condicionDomicilio")}</td>
         <td><span class="badge badge-${item.status}">${item.status}</span></td>
-        <td class="file-links">${fileLinks} ${emailPreviewButton} ${downloadAll}</td>
+        <td class="file-links">${fileLinks} ${emailPreviewButton} ${downloadAll} ${deleteButton}</td>
       </tr>`;
   }).join("");
 }
@@ -697,7 +741,7 @@ timeBtns.forEach((btn) => {
 async function loadDocuments() {
   const res = await authFetch("/api/documents");
   const data = await res.json();
-  allDocuments = data.items || [];
+  allDocuments = (data.items || []).filter((item) => item.status !== "error");
   applyAndRender();
 }
 
@@ -737,18 +781,65 @@ async function uploadMassiveImport(file) {
 }
 
 // --- ZIP export --------------------------------------------------------------
-async function generateExport() {
+function openExportSelectionModal() {
   const checked = selectedIds();
   if (!checked.length) {
     exportResult.textContent = "Selecciona al menos un documento para exportar.";
     return;
   }
 
+  const docs = allDocuments.filter((item) => checked.includes(item.id));
+  exportSelectionList.innerHTML = docs
+    .map((doc) => {
+      const label = doc.empresa || doc.extracted?.numeroDocumento || doc.id;
+      const files = (doc.files || [])
+        .map(
+          (f) => `
+            <label>
+              <input type="checkbox" data-export-file data-doc-id="${doc.id}" value="${escHtml(f.fileName)}" checked />
+              ${escHtml(f.fileName)}
+            </label>`
+        )
+        .join("");
+      return `
+        <div class="export-selection-item" data-export-doc="${doc.id}">
+          <p class="export-selection-item-title">${escHtml(label)}</p>
+          <div class="export-selection-files">${files || '<span class="muted">Sin archivos</span>'}</div>
+        </div>`;
+    })
+    .join("");
+
+  exportSelectionModal.hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function closeExportSelectionModal() {
+  exportSelectionModal.hidden = true;
+  document.body.classList.remove("modal-open");
+}
+
+async function confirmExportSelection() {
+  const checkboxes = [...exportSelectionList.querySelectorAll("[data-export-file]")];
+  const byDoc = new Map();
+  for (const cb of checkboxes) {
+    if (!cb.checked) continue;
+    const id = cb.dataset.docId;
+    if (!byDoc.has(id)) byDoc.set(id, []);
+    byDoc.get(id).push(cb.value);
+  }
+
+  const items = [...byDoc.entries()].map(([id, fileNames]) => ({ id, fileNames }));
+  if (!items.length) {
+    exportResult.textContent = "Selecciona al menos un archivo para exportar.";
+    return;
+  }
+
+  closeExportSelectionModal();
   exportResult.textContent = "Generando ZIP consolidado...";
   const res = await authFetch("/api/exports", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids: checked }),
+    body: JSON.stringify({ items }),
   });
 
   if (!res.ok) {
@@ -794,7 +885,8 @@ function exportExcel() {
     "Centro de costos": getDisplayValue(item, "centroCostos"),
     "Val. COES": getDisplayValue(item, "coesValidacion"),
     Concepto: getDisplayValue(item, "concept"),
-    Monto: getDisplayValue(item, "monto"),
+    "Monto (IGV agregado 18%)": getDisplayValue(item, "monto"),
+    "Monto sin IGV": getDisplayValue(item, "montoSinIgv"),
     "Est. CP": getDisplayValue(item, "estadoComprobante"),
     "Est. RUC": getDisplayValue(item, "estadoContribuyente"),
     Domicilio: getDisplayValue(item, "condicionDomicilio"),
@@ -906,7 +998,7 @@ function renderChart(items) {
 
 // --- Event listeners ---------------------------------------------------------
 document.getElementById("refreshBtn").addEventListener("click", loadDocuments);
-document.getElementById("exportBtn").addEventListener("click", generateExport);
+document.getElementById("exportBtn").addEventListener("click", openExportSelectionModal);
 document.getElementById("exportExcelBtn").addEventListener("click", exportExcel);
 clearFiltersBtn.addEventListener("click", clearAllFilters);
 
@@ -937,6 +1029,35 @@ bodyEl.addEventListener("click", (event) => {
   if (!trigger) return;
   openCellEditor(trigger);
 });
+bodyEl.addEventListener("click", (event) => {
+  const trigger = event.target.closest("[data-expandable='1']");
+  if (!trigger) return;
+  const wasExpanded = trigger.classList.contains("cell-expanded");
+  document.querySelectorAll(".cell-expanded").forEach((el) => el.classList.remove("cell-expanded"));
+  if (!wasExpanded) trigger.classList.add("cell-expanded");
+});
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-expandable='1']")) return;
+  document.querySelectorAll(".cell-expanded").forEach((el) => el.classList.remove("cell-expanded"));
+});
+bodyEl.addEventListener("click", async (event) => {
+  const trigger = event.target.closest("[data-delete-id]");
+  if (!trigger) return;
+  const id = trigger.dataset.deleteId;
+  const doc = allDocuments.find((item) => item.id === id);
+  const label = doc?.empresa || doc?.metadata?.subject || id;
+  if (!window.confirm(`Eliminar el registro de "${label}"? Esta accion no se puede deshacer.`)) return;
+
+  trigger.disabled = true;
+  try {
+    await deleteDocument(id);
+    allDocuments = allDocuments.filter((item) => item.id !== id);
+    applyAndRender();
+  } catch (err) {
+    window.alert(err.message || "No se pudo eliminar el documento.");
+    trigger.disabled = false;
+  }
+});
 bodyEl.addEventListener("change", (event) => {
   const target = event.target;
   if (!target.matches("select[data-edit-field]")) return;
@@ -962,8 +1083,41 @@ emailPreviewModal.addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !emailPreviewModal.hidden) closeEmailPreview();
+  if (event.key === "Escape" && !exportSelectionModal.hidden) closeExportSelectionModal();
 });
+
+closeExportModalBtn.addEventListener("click", closeExportSelectionModal);
+exportSelectionCancelBtn.addEventListener("click", closeExportSelectionModal);
+exportSelectionConfirmBtn.addEventListener("click", confirmExportSelection);
+exportSelectionModal.addEventListener("click", (event) => {
+  if (event.target.matches("[data-close-export-modal]")) closeExportSelectionModal();
+});
+
+// --- Realtime -----------------------------------------------------------------
+function handleRealtimeMessage(message) {
+  if (message.type === "new_document" || message.type === "document_updated") {
+    const record = message.record;
+    if (!record?.id) return;
+    const idx = allDocuments.findIndex((doc) => doc.id === record.id);
+    if (record.status === "error") {
+      if (idx >= 0) allDocuments.splice(idx, 1);
+    } else if (idx >= 0) {
+      allDocuments[idx] = record;
+    } else {
+      allDocuments.unshift(record);
+    }
+    applyAndRender();
+  } else if (message.type === "document_deleted") {
+    if (!message.id) return;
+    allDocuments = allDocuments.filter((doc) => doc.id !== message.id);
+    applyAndRender();
+  }
+}
 
 // --- Init --------------------------------------------------------------------
 buildTableHeaders();
-initAuth().then((ok) => { if (ok !== false) loadDocuments(); });
+initAuth().then((ok) => {
+  if (ok === false) return;
+  loadDocuments();
+  openRealtime(handleRealtimeMessage);
+});

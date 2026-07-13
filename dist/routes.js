@@ -14,14 +14,19 @@ const parser_1 = require("./services/parser");
 const repository_1 = require("./services/repository");
 const coesService_1 = require("./services/coesService");
 const centroCostosService_1 = require("./services/centroCostosService");
+const centroCostosCatalog_1 = require("./services/centroCostosCatalog");
 const sunatService_1 = require("./services/sunatService");
 const zipService_1 = require("./services/zipService");
 const classifier_1 = require("./utils/classifier");
 const hash_1 = require("./utils/hash");
 const auth_1 = require("./middleware/auth");
-// fieldSize de 25MB: Workato envía archivos como hex en campos de texto
-// (1 byte → 2 chars hex), por lo que un PDF de 10MB ocupa ~20MB como texto.
-const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fieldSize: 25 * 1024 * 1024 } });
+const realtime_1 = require("./services/realtime");
+// fieldSize de 100MB: Workato envía archivos como hex en campos de texto
+// (1 byte → 2 chars hex), por lo que un PDF ocupa ~2x como texto. Con 100MB
+// caben PDFs de ~50MB antes de que multer trunque el campo silenciosamente.
+// Trade-off: memoryStorage retiene todo el payload en RAM del Container App,
+// asi que subir mucho mas este limite presiona la memoria de la instancia.
+const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fieldSize: 100 * 1024 * 1024 } });
 const router = express_1.default.Router();
 const repository = (0, repository_1.createRepository)();
 const blobStorage = new blobStorage_1.BlobStorageService();
@@ -578,6 +583,11 @@ function ensureAuthorized(req, options) {
     }
     return { authorized: true };
 }
+function pickStringField(value) {
+    if (typeof value === "string" && value.trim())
+        return value.trim();
+    return undefined;
+}
 function normalizeIncomingMetadata(body) {
     const bodyNorm = { ...body, receivedAt: body.receivedAt ?? body.recievedAt };
     const metadataResult = metadataSchema.safeParse(bodyNorm);
@@ -586,8 +596,18 @@ function normalizeIncomingMetadata(body) {
     const data = metadataResult.data;
     const emailBodyHtml = data.bodyHtml ?? data.emailBodyHtml ?? data.html ?? data.body;
     const bodyText = data.bodyText;
+    const sender = pickStringField(data.sender) ??
+        pickStringField(body.from) ??
+        pickStringField(body.From) ??
+        pickStringField(body.emailFrom) ??
+        pickStringField(body.remitente) ??
+        pickStringField(body.senderEmail);
+    if (!sender) {
+        console.warn("[intake] metadata.sender no llego en el body. Campos recibidos:", Object.keys(body));
+    }
     return {
         ...data,
+        sender,
         bodyHtml: emailBodyHtml,
         bodyText,
         body: data.body,
@@ -668,6 +688,13 @@ async function expandSupportedFiles(files) {
     }
     return expandedFiles;
 }
+// Detecta si un XML es un CDR de SUNAT (<ApplicationResponse>, a veces con
+// prefijo ar:). El nombre del elemento raiz es ASCII y aparece al inicio del
+// documento, asi que basta inspeccionar el encabezado sin parsear todo el XML.
+function isSunatCdr(buffer) {
+    const head = buffer.toString("latin1", 0, 2048);
+    return /<(?:\w+:)?ApplicationResponse[\s>]/.test(head);
+}
 async function processIntakeFiles(files, metadata) {
     if (metadata.messageId) {
         const existing = await repository.findByMessageId(metadata.messageId);
@@ -700,9 +727,13 @@ async function processIntakeFiles(files, metadata) {
     let extractionError;
     try {
         const xmlFiles = expandedFiles.filter((f) => (0, parser_1.detectFileType)(f.originalname, f.mimetype, f.buffer) === "xml");
+        // El CDR (ApplicationResponse de SUNAT) no trae datos financieros y solo
+        // devuelve rawTextSnippet; se excluye del merge para no pisar el snippet de
+        // la factura real. El archivo del CDR se guarda igual como adjunto.
+        const invoiceXmlFiles = xmlFiles.filter((f) => !isSunatCdr(f.buffer));
         const pdfFile = expandedFiles.find((f) => (0, parser_1.detectFileType)(f.originalname, f.mimetype, f.buffer) === "pdf");
-        if (xmlFiles.length > 0) {
-            for (const xmlFile of xmlFiles) {
+        if (invoiceXmlFiles.length > 0) {
+            for (const xmlFile of invoiceXmlFiles) {
                 const result = await (0, parser_1.extractFields)("xml", xmlFile.buffer, xmlFile.mimetype);
                 for (const [k, v] of Object.entries(result)) {
                     if (v !== undefined && v !== null && v !== "") {
@@ -720,10 +751,19 @@ async function processIntakeFiles(files, metadata) {
     }
     const documentType = (0, classifier_1.classifyDocument)(extracted);
     const concept = extracted.concepto ?? (0, classifier_1.inferConcept)(extracted);
+    // resolveCentroCostos se conserva por la validacion de monto COES (coesValidacion).
+    // El valor de centroCostos ya NO se toma de aqui: ahora se deriva del concepto
+    // via catalogo por keywords y solo aplica a facturas (ver mas abajo).
     const centroCostosResult = await (0, centroCostosService_1.resolveCentroCostos)(extracted, blobStorage).catch((err) => {
         console.warn("[centroCostos] Resolucion fallo:", err instanceof Error ? err.message : err);
         return {};
     });
+    // Centro de costos: dependiente del concepto y solo para facturas. Se usa el
+    // texto del concepto (+ snippet como respaldo) para el match best-effort; si no
+    // hay coincidencia queda vacio para asignacion manual desde el dashboard.
+    const centroCostos = documentType === "factura"
+        ? (0, centroCostosCatalog_1.resolveCentroCostosCode)([extracted.concepto, extracted.rawTextSnippet].filter(Boolean).join(" "))
+        : undefined;
     let sunatValidacion;
     const numDoc = extracted.numeroDocumento;
     const rucExtracted = extracted.ruc;
@@ -758,7 +798,7 @@ async function processIntakeFiles(files, metadata) {
         documentType,
         concept,
         empresa: extracted.emisor ?? "",
-        centroCostos: centroCostosResult.centroCostos,
+        centroCostos,
         ruc: extracted.ruc ?? "",
         sunatValidacion,
         coesValidacion: centroCostosResult.coesValidacion,
@@ -768,6 +808,7 @@ async function processIntakeFiles(files, metadata) {
         updatedAt: now,
     };
     await repository.save(record);
+    (0, realtime_1.broadcastNewDocument)(record);
     return {
         statusCode: 202,
         body: { requestId, accepted: attachedFiles.length, rejected, record },
@@ -975,11 +1016,34 @@ router.get("/documents/:id", auth_1.requireAuth, async (req, res) => {
     }
     return res.json(item);
 });
+router.delete("/documents/:id", auth_1.requireAuth, async (req, res) => {
+    const item = await repository.findById(req.params.id);
+    if (!item) {
+        return res.status(404).json({ error: "Documento no encontrado." });
+    }
+    for (const file of item.files) {
+        try {
+            await blobStorage.delete(file.sourcePath);
+        }
+        catch (err) {
+            console.warn(`[documents] No se pudo borrar el archivo ${file.sourcePath}:`, err instanceof Error ? err.message : err);
+        }
+    }
+    await repository.delete(item.id, item.empresa);
+    (0, realtime_1.broadcastDocumentDeleted)(item.id);
+    return res.status(204).end();
+});
 const updateDocumentSchema = zod_1.z.object({
     empresa: zod_1.z.string().trim().min(1).optional(),
     documentType: zod_1.z.enum(["factura", "comprobante", "nota", "desconocido"]).optional(),
     centroCostos: zod_1.z.string().trim().min(1).optional(),
     monto: zod_1.z.number().finite().nonnegative().nullable().optional(),
+    ruc: zod_1.z.string().trim().optional(),
+    concept: zod_1.z.string().trim().optional(),
+    fechaEmision: zod_1.z.string().trim().optional(),
+    fechaVencimiento: zod_1.z.string().trim().optional(),
+    numeroDocumento: zod_1.z.string().trim().optional(),
+    resolveError: zod_1.z.boolean().optional(),
 });
 router.patch("/documents/:id", auth_1.requireAuth, async (req, res) => {
     const parsed = updateDocumentSchema.safeParse(req.body ?? {});
@@ -996,13 +1060,23 @@ router.patch("/documents/:id", auth_1.requireAuth, async (req, res) => {
         empresa: payload.empresa ?? current.empresa,
         documentType: payload.documentType ?? current.documentType,
         centroCostos: payload.centroCostos ?? current.centroCostos,
+        ruc: payload.ruc ?? current.ruc,
+        concept: payload.concept ?? current.concept,
         extracted: {
             ...current.extracted,
             monto: payload.monto === undefined ? current.extracted?.monto : payload.monto ?? undefined,
+            ruc: payload.ruc ?? current.extracted?.ruc,
+            concepto: payload.concept ?? current.extracted?.concepto,
+            fechaEmision: payload.fechaEmision ?? current.extracted?.fechaEmision,
+            fechaVencimiento: payload.fechaVencimiento ?? current.extracted?.fechaVencimiento,
+            numeroDocumento: payload.numeroDocumento ?? current.extracted?.numeroDocumento,
         },
+        status: payload.resolveError ? "pendiente" : current.status,
+        error: payload.resolveError ? undefined : current.error,
         updatedAt: new Date().toISOString(),
     };
     await repository.save(updated);
+    (0, realtime_1.broadcastDocumentUpdated)(updated);
     return res.json({ item: updated });
 });
 // Download individual file (opens PDF inline, downloads XML)
@@ -1054,31 +1128,47 @@ router.get("/documents/:id/file", async (req, res) => {
             res.status(500).json({ error: "No se pudo obtener el archivo." });
     }
 });
+const exportSelectionSchema = zod_1.z.object({
+    id: zod_1.z.string(),
+    fileNames: zod_1.z.array(zod_1.z.string()).optional(),
+});
 router.post("/exports", auth_1.requireAuth, async (req, res) => {
-    const ids = req.body.ids;
-    if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ error: "Se requiere un array de IDs en el campo ids." });
+    let selections;
+    if (Array.isArray(req.body.items)) {
+        const parsed = zod_1.z.array(exportSelectionSchema).safeParse(req.body.items);
+        if (!parsed.success) {
+            return res.status(400).json({ error: "Payload invalido en el campo items." });
+        }
+        selections = parsed.data;
+    }
+    else if (Array.isArray(req.body.ids)) {
+        selections = req.body.ids.filter((id) => typeof id === "string").map((id) => ({ id }));
+    }
+    else {
+        return res.status(400).json({ error: "Se requiere un array de items (o ids) para exportar." });
+    }
+    if (!selections.length) {
+        return res.status(400).json({ error: "Se requiere al menos un documento para exportar." });
     }
     const records = [];
-    for (const id of ids) {
-        if (typeof id !== "string")
-            continue;
-        const rec = await repository.findById(id);
+    for (const sel of selections) {
+        const rec = await repository.findById(sel.id);
         if (rec)
-            records.push(rec);
+            records.push({ record: rec, fileNames: sel.fileNames });
     }
     if (!records.length) {
         return res.status(404).json({ error: "No se encontraron registros para los IDs indicados." });
     }
     const usedRecordFolders = new Map();
-    const allRefs = records.flatMap((record) => {
+    const allRefs = records.flatMap(({ record, fileNames }) => {
         const empresaFolder = folderName(record.empresa || "SIN EMPRESA");
         const recordBase = folderName(record.extracted?.numeroDocumento || record.id || "registro");
         const recordKey = `${empresaFolder}/${recordBase}`;
         const seen = (usedRecordFolders.get(recordKey) ?? 0) + 1;
         usedRecordFolders.set(recordKey, seen);
         const recordFolder = seen > 1 ? `${recordBase}_${seen}` : recordBase;
-        return record.files.map((file) => ({
+        const filesToInclude = fileNames ? record.files.filter((file) => fileNames.includes(file.fileName)) : record.files;
+        return filesToInclude.map((file) => ({
             fileName: file.fileName,
             sourcePath: file.sourcePath,
             zipPath: `${empresaFolder}/${recordFolder}/${file.fileName}`,
@@ -1102,8 +1192,8 @@ router.post("/exports", auth_1.requireAuth, async (req, res) => {
         return;
     }
     const now = new Date().toISOString();
-    for (const rec of records) {
-        await repository.save({ ...rec, status: "procesado", updatedAt: now });
+    for (const { record } of records) {
+        await repository.save({ ...record, status: "procesado", updatedAt: now });
     }
 });
 exports.default = router;

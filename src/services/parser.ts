@@ -107,7 +107,7 @@ async function extractFromXml(buffer: Buffer): Promise<ExtractedFields> {
 }
 
 function getBusinessDocument(parsed: Record<string, unknown>): Record<string, unknown> {
-  const document = parsed["Invoice"] ?? parsed["DebitNote"] ?? parsed;
+  const document = parsed["Invoice"] ?? parsed["DebitNote"] ?? parsed["CreditNote"] ?? parsed;
   return (document ?? parsed) as Record<string, unknown>;
 }
 
@@ -130,13 +130,22 @@ function findChild(obj: unknown, name: string): unknown {
 }
 
 function getFirstDocumentLine(document: Record<string, unknown>): unknown {
-  const line = findChild(document, "InvoiceLine") ?? findChild(document, "DebitNoteLine");
+  const line =
+    findChild(document, "InvoiceLine") ??
+    findChild(document, "DebitNoteLine") ??
+    findChild(document, "CreditNoteLine");
   return Array.isArray(line) ? line[0] : line;
 }
 
 function getDocumentTypeFallback(parsed: Record<string, unknown>, document: Record<string, unknown>): string | undefined {
   if (parsed["DebitNote"] != null) {
     return "08";
+  }
+
+  // Las notas de credito UBL rara vez traen cbc:CreditNoteTypeCode; el tipo lo
+  // determina el elemento raiz <CreditNote>. Se mapea a "07" (nota de credito).
+  if (parsed["CreditNote"] != null) {
+    return "07";
   }
 
   return (

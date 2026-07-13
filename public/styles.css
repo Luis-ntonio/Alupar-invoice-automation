@@ -528,6 +528,101 @@ tbody tr:hover {
   gap: 0.45rem;
 }
 
+.coes-card-clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.coes-card-clickable:hover {
+  border-color: rgba(79, 215, 255, 0.6);
+  transform: translateY(-2px);
+}
+
+.failed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.failed-card {
+  background: rgba(6, 18, 40, 0.7);
+  border: 1px solid rgba(255, 107, 107, 0.25);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.failed-card-main {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 16px;
+}
+
+.failed-card-meta p {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+  color: #c7d8f7;
+}
+
+.failed-card-error {
+  color: #ff8d8d;
+}
+
+.failed-preview-frame {
+  width: 100%;
+  height: 220px;
+  border: 1px solid rgba(79, 215, 255, 0.14);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.failed-card-actions {
+  margin-top: 0.8rem;
+}
+
+.failed-card-form {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(79, 215, 255, 0.14);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 14px;
+}
+
+.failed-card-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: #c7d8f7;
+}
+
+.failed-card-form input,
+.failed-card-form select {
+  background: rgba(2, 6, 14, 0.6);
+  border: 1px solid rgba(79, 215, 255, 0.25);
+  border-radius: 8px;
+  color: #eaf2ff;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+
+.failed-card-form-wide {
+  grid-column: 1 / -1;
+}
+
+.failed-card-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .failed-card-main,
+  .failed-card-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 .coes-card-name {
   font-weight: 700;
   font-size: 0.92rem;
@@ -649,6 +744,22 @@ tbody tr:hover {
 
 .btn-link:hover {
   text-decoration: underline;
+}
+
+.btn-delete {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.btn-delete:hover {
+  color: #ff6b6b;
+}
+
+.btn-delete:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .chart-panel h2 {
@@ -880,6 +991,36 @@ tbody tr:hover {
   border-bottom-color: rgba(79, 215, 255, 0.6);
 }
 
+.cell-truncate {
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  cursor: default;
+}
+
+.cell-expandable {
+  cursor: pointer;
+}
+
+.cell-expandable.cell-expanded {
+  position: relative;
+  z-index: 5;
+  max-width: none;
+  width: max-content;
+  max-width: min(480px, 80vw);
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
+  background: #1c2333;
+  border: 1px solid rgba(79, 215, 255, 0.4);
+  border-radius: 4px;
+  padding: 4px 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
 .email-modal {
   position: fixed;
   inset: 0;
@@ -962,6 +1103,60 @@ tbody tr:hover {
 
 body.modal-open {
   overflow: hidden;
+}
+
+.export-modal-card {
+  width: min(720px, 94vw);
+}
+
+.export-modal-body {
+  gap: 14px;
+}
+
+.export-selection-list {
+  max-height: min(60vh, 560px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.export-selection-item {
+  background: rgba(6, 18, 40, 0.7);
+  border: 1px solid rgba(79, 215, 255, 0.18);
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+}
+
+.export-selection-item-title {
+  font-weight: 700;
+  color: #eaf2ff;
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+
+.export-selection-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.export-selection-files label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #c7d8f7;
+  background: rgba(2, 6, 14, 0.5);
+  border: 1px solid rgba(79, 215, 255, 0.14);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.export-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 @media (max-width: 930px) {

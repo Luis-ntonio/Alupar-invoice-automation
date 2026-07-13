@@ -70,6 +70,51 @@ function showUserBadge(account) {
   });
 }
 
+// --- Realtime (WebSocket) ----------------------------------------------------
+// Reconexion con backoff exponencial (5s -> 10s -> 20s, tope 30s) ya que la
+// app corre en una sola replica y cualquier redeploy/restart corta la conexion.
+function openRealtime(onMessage) {
+  let socket = null;
+  let attempt = 0;
+  let closedByUser = false;
+
+  async function connect() {
+    const token = await getToken();
+    if (_authEnabled && !token) return; // getToken ya redirige a login si hace falta
+
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+    socket = new WebSocket(wsUrl);
+
+    socket.addEventListener("message", (event) => {
+      try {
+        onMessage(JSON.parse(event.data));
+      } catch {
+        // ignorar mensajes no JSON
+      }
+    });
+
+    socket.addEventListener("close", () => {
+      if (closedByUser) return;
+      attempt += 1;
+      const delay = Math.min(30000, 5000 * attempt);
+      setTimeout(connect, delay);
+    });
+
+    socket.addEventListener("open", () => {
+      attempt = 0;
+    });
+  }
+
+  connect();
+  return {
+    close() {
+      closedByUser = true;
+      socket?.close();
+    },
+  };
+}
+
 function escHtml(str) {
   return String(str ?? "")
     .replace(/&/g, "&amp;")

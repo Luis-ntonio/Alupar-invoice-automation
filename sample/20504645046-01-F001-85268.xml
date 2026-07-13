@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ccts="urn:un:unece:uncefact:documentation:2" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:ns15="http://uri.etsi.org/01903/v1.4.1#" xmlns:qdt="urn:oasis:names:specification:ubl:schema:xsd:QualifiedDatatypes-2" xmlns:sac="urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1" xmlns:udt="urn:un:unece:uncefact:data:specification:UnqualifiedDataTypesSchemaModule:2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><sac:AdditionalInformation><sac:AdditionalMonetaryTotal><cbc:ID>1001</cbc:ID><cbc:Name>TOTAL VALOR DE VENTA - OPERACIONES GRAVADAS</cbc:Name><cbc:PayableAmount currencyID="PEN">156.55</cbc:PayableAmount></sac:AdditionalMonetaryTotal></sac:AdditionalInformation></ext:ExtensionContent></ext:UBLExtension><ext:UBLExtension><ext:ExtensionContent><ds:Signature Id="SignatureSP" xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<ds:Reference URI="">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>LujXPO8fN2PglUM+tf27bz9qQxc=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>
+zg2WSnbNCcZFqSBIe1u53ujGsfzamWS76iUSCyt0hB/7YXsr2lmPD3Moaq7nf5zZLYIfi1U1WhZo
+JJSUilGhMqh31BItwf8plC4CW/bVSjK7uFOieFCGHVEWbdXzc5G9kvKHrF7NPts2rwsfiRf08O4X
+a92wjK67sGpggLZqJBAkwYsoptahHCVu9fcxUK81yGPlerRSW/1GX+KsRt8xU59i85TW1ss6Rhh1
+R+Tbr0C8ax9PxklXAGng205DKkPOqssaeCtron+yR7RLxUQJUPYjey0eln1Ktu2sgpDT2DurLCOA
+wpXxqY1Q9nyQSM0FEnrJ/SUwWDe1zHM2xSZZFw==
+</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509Certificate>
+MIIFxTCCBK2gAwIBAgITdpEAGrsw9Kl95JuTZZgmU4UcHzANBgkqhkiG9w0BAQsFADCBkjELMAkG
+A1UEBhMCQ0gxEDAOBgNVBAoTB1dJU2VLZXkxJjAkBgNVBAsTHUNvcHlyaWdodCAoYykgMjAxNiBX
+SVNlS2V5IFNBMRYwFAYDVQQLEw1JbnRlcm5hdGlvbmFsMTEwLwYDVQQDEyhXSVNlS2V5IENlcnRp
+ZnlJRCBBZHZhbmNlZCBTZXJ2aWNlcyBDQSA0MB4XDTI1MDYyNTIzMTI0MFoXDTI4MDYyNDIzMTIz
+OVowgfIxCzAJBgNVBAYTAlBFMQ0wCwYDVQQHDARMSU1BMRwwGgYDVQQKDBNBWlVSSUFOIFBFUlUg
+Uy5BLkMuMS8wLQYDVQQLDCZWYWxpZGF0ZWQgYnkgWnlUcnVzdCBTb2NpZWRhZCBBbsOzbmltYTEV
+MBMGA1UECwwMRE5JIDcwODczNTI3MRQwEgYDVQQLDAsyMDU1Njg0MzkxMTEoMCYGA1UEAwwfSkhP
+TkFUQU4gU1RFVkVOIEJBSk9ORVJPIFFVSVNQRTEuMCwGCSqGSIb3DQEJARYfamhvbmF0YW4uYmFq
+b25lcm9AbW9udHRncm91cC5wZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOT4flUg
+x0GzT1k2Wj7jgNJiVfMrVCbTIkvhZC2vZoJHRWwIJdG2C500SaG9ETkoqeYo5WDje/uToMNNANnJ
+my03IH/932JfvrA1VDiQrfxhQZEczKzWvTbfDYBGWHkVguYN05JhYh3vjxw9LksXhpASTdSIOGrV
+oz4cti/2jtlEFdcFv/Hl8H+e26x8WDCZxDBElCnpDictyp+qpoNie8ihGebNJaq69yrjW0CtPZWu
+uonCu0tr94vZUMg2wtdNbPjZD4A/ouERl/yKSZTRt3CSV6pglONLhRVzsci/kwDXe1h4oZX38jSw
+WA6LLvO821iDkhe90T5D+971/XNr+nkCAwEAAaOCAbAwggGsMAwGA1UdEwEB/wQCMAAwHwYDVR0j
+BBgwFoAU9OSbV9Kuwp6ITQC6K69lyWOph5swbAYIKwYBBQUHAQEEYDBeMDcGCCsGAQUFBzAChito
+dHRwOi8vcHVibGljLndpc2VrZXkuY29tL2NydC93Y2lkYXNjYTQuY3J0MCMGCCsGAQUFBzABhhdo
+dHRwOi8vb2NzcC53aXNla2V5LmNvbTAqBgNVHREEIzAhgR9qaG9uYXRhbi5iYWpvbmVyb0Btb250
+dGdyb3VwLnBlMFMGA1UdIARMMEowPAYIYIV0BQ4HBAIwMDAuBggrBgEFBQcCARYiaHR0cDovL3d3
+dy53aXNla2V5LmNvbS9yZXBvc2l0b3J5LzAKBghghXQFDggBATA8BgNVHR8ENTAzMDGgL6Athito
+dHRwOi8vcHVibGljLndpc2VrZXkuY29tL2NybC93Y2lkYXNjYTQuY3JsMB0GA1UdDgQWBBRwRlZR
+k/FBDp8HdjYAM3t233vspjAfBgNVHSUEGDAWBggrBgEFBQcDAgYKKwYBBAGCNwoDDDAOBgNVHQ8B
+Af8EBAMCBsAwDQYJKoZIhvcNAQELBQADggEBAAACTuvMAyzgKSC+j6eUdFb10O7LranxaPTrDElR
+DcHT2cPV/06TDVSbcp/wo3+qiK+KEVDm6qYxQBH0mbQjq7VbDloAttM8dV5yU8+EiYcPERnte3LE
++dJAVsQQV2tpGOjkOUKU0t9ulLdpo6nnLaZobaKg7xHDr7gkdcGYmbcUij3twmNabmYyKxqtQBAd
+gRteokaEVMmcnhYr646pISUxf2nsE/3dKL7BUfwWy5R/VRyljAtnt3fJhJJRipvkOvl7R67j+5yV
+wEoI91dWomb5A4m9Bz2n8voVHjUjpx1PVzyC+cxQROGNHdYioIZeRJNNNgUL+htl4L5jLdpnnq4=
+</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+</ds:Signature></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions><cbc:UBLVersionID>2.1</cbc:UBLVersionID><cbc:CustomizationID schemeAgencyName="PE:SUNAT">2.0</cbc:CustomizationID><cbc:ProfileID schemeAgencyName="PE:SUNAT" schemeName="SUNAT:Identificador de Tipo de Operacion" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo17">0101</cbc:ProfileID><cbc:ID>F001-85268</cbc:ID><cbc:IssueDate>2026-07-11</cbc:IssueDate><cbc:IssueTime>10:39:14</cbc:IssueTime><cbc:InvoiceTypeCode listAgencyName="PE:SUNAT" listID="0101" listName="Tipo de Documento" listSchemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01" name="Tipo de Operacion">01</cbc:InvoiceTypeCode><cbc:Note languageLocaleID="1000">CIENTO OCHENTA Y CUATRO Y 73/100 SOLES</cbc:Note><cbc:DocumentCurrencyCode listAgencyName="United Nations Economic Commission for Europe" listID="ISO 4217 Alpha" listName="Currency">PEN</cbc:DocumentCurrencyCode><cbc:LineCountNumeric>1</cbc:LineCountNumeric><cac:Signature><cbc:ID>IDSignSP</cbc:ID><cac:SignatoryParty><cac:PartyIdentification><cbc:ID>20504645046</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name>RED DE ENERGIA DEL PERU SA</cbc:Name></cac:PartyName></cac:SignatoryParty><cac:DigitalSignatureAttachment><cac:ExternalReference><cbc:URI>#SignatureSP</cbc:URI></cac:ExternalReference></cac:DigitalSignatureAttachment></cac:Signature><cac:AccountingSupplierParty><cac:Party><cac:PartyIdentification><cbc:ID schemeAgencyName="PE:SUNAT" schemeID="6" schemeName="Documento de Identidad" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20504645046</cbc:ID></cac:PartyIdentification><cac:PartyName><cbc:Name>RED DE ENERGIA DEL PERU S.A.</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>Av. Santa Cruz 120, Interior 301, San Isidro, Lima, Lima.</cbc:StreetName><cbc:CityName>LIMA</cbc:CityName><cbc:CountrySubentity>LIMA</cbc:CountrySubentity><cbc:District>SAN ISIDRO</cbc:District><cac:Country><cbc:IdentificationCode>PE</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyLegalEntity><cbc:RegistrationName>RED DE ENERGIA DEL PERU SA</cbc:RegistrationName><cac:RegistrationAddress><cbc:ID>150131</cbc:ID><cbc:AddressTypeCode listAgencyName="PE:SUNAT" listName="Establecimientos anexos">0000</cbc:AddressTypeCode></cac:RegistrationAddress></cac:PartyLegalEntity></cac:Party></cac:AccountingSupplierParty><cac:AccountingCustomerParty><cac:Party><cac:PartyIdentification><cbc:ID schemeAgencyName="PE:SUNAT" schemeID="6" schemeName="Documento de Identidad" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20492925030</cbc:ID></cac:PartyIdentification><cac:PhysicalLocation><cbc:Description>AV JOSE PARDO N 434 INT 902 ED LIT</cbc:Description></cac:PhysicalLocation><cac:PartyLegalEntity><cbc:RegistrationName>LA VIRGEN S.A.C.</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingCustomerParty><cac:PaymentTerms><cbc:ID>FormaPago</cbc:ID><cbc:PaymentMeansID>Credito</cbc:PaymentMeansID><cbc:Amount currencyID="PEN">184.73</cbc:Amount></cac:PaymentTerms><cac:PaymentTerms><cbc:ID>FormaPago</cbc:ID><cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID><cbc:Amount currencyID="PEN">184.73</cbc:Amount><cbc:PaymentDueDate>2026-07-18</cbc:PaymentDueDate></cac:PaymentTerms><cac:TaxTotal><cbc:TaxAmount currencyID="PEN">28.18</cbc:TaxAmount><cac:TaxSubtotal><cbc:TaxableAmount currencyID="PEN">156.55</cbc:TaxableAmount><cbc:TaxAmount currencyID="PEN">28.18</cbc:TaxAmount><cac:TaxCategory><cbc:ID schemeAgencyName="United Nations Economic Commission for Europe" schemeID="UN/ECE 5305" schemeName="Tax Category Identifier">S</cbc:ID><cac:TaxScheme><cbc:ID schemeAgencyName="PE:SUNAT" schemeName="Codigo de tributos" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID><cbc:Name>IGV</cbc:Name><cbc:TaxTypeCode>VAT</cbc:TaxTypeCode></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal></cac:TaxTotal><cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="PEN">156.55</cbc:LineExtensionAmount><cbc:TaxInclusiveAmount currencyID="PEN">184.73</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="PEN">184.73</cbc:PayableAmount></cac:LegalMonetaryTotal><cac:InvoiceLine><cbc:ID>1</cbc:ID><cbc:InvoicedQuantity unitCode="SR" unitCodeListAgencyName="United Nations Economic Commission for Europe" unitCodeListID="UN/ECE rec 20">1.0000000000</cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="PEN">156.55</cbc:LineExtensionAmount><cac:PricingReference><cac:AlternativeConditionPrice><cbc:PriceAmount currencyID="PEN">184.7300000000</cbc:PriceAmount><cbc:PriceTypeCode listAgencyName="PE:SUNAT" listName="Tipo de Precio" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode></cac:AlternativeConditionPrice></cac:PricingReference><cac:TaxTotal><cbc:TaxAmount currencyID="PEN">28.18</cbc:TaxAmount><cac:TaxSubtotal><cbc:TaxableAmount currencyID="PEN">156.55</cbc:TaxableAmount><cbc:TaxAmount currencyID="PEN">28.18</cbc:TaxAmount><cac:TaxCategory><cbc:ID schemeAgencyID="6" schemeAgencyName="United Nations Economic Commission for Europe" schemeID="UN/ECE 5305" schemeName="Tax Category Identifier">S</cbc:ID><cbc:Percent>18.00</cbc:Percent><cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionReasonCode><cac:TaxScheme><cbc:ID schemeAgencyName="PE:SUNAT" schemeName="Codigo de tributos" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID><cbc:Name>IGV</cbc:Name><cbc:TaxTypeCode>VAT</cbc:TaxTypeCode></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal></cac:TaxTotal><cac:Item><cbc:Description>Ingreso Tarifario_REP - SST y SCT  Por el Ingreso Tarifario del SST y SCT de Red de Energia del Peru, correspondiente junio 2026, De a cuerdo a Resolucion Nº 118-2025-OS/CD del OSINERGMIN, e informe COES/D/DO/SME-INF-126-2026</cbc:Description><cac:SellersItemIdentification><cbc:ID>REPSERVICIO-057436</cbc:ID></cac:SellersItemIdentification><cac:CommodityClassification><cbc:ItemClassificationCode listAgencyName="GS1 US" listID="UNSPSC" listName="Item Classification">83101804</cbc:ItemClassificationCode></cac:CommodityClassification></cac:Item><cac:Price><cbc:PriceAmount currencyID="PEN">156.5500000000</cbc:PriceAmount></cac:Price></cac:InvoiceLine></Invoice>

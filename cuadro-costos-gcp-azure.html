@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cuadro de costos de nube | GCP vs Azure</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #060b16;
+      --bg-2: #0a1020;
+      --card: #10192d;
+      --card-2: #141f36;
+      --line: #1f2d4f;
+      --txt: #e8eefc;
+      --muted: #9cabcc;
+      --cyan: #4fd7ff;
+      --mint: #39e7c4;
+      --amber: #ffbe55;
+      --red: #ff5f6d;
+      --blue: #5a9dff;
+      --orange: #ff5a2a;
+      --shadow: 0 14px 36px rgba(0, 0, 0, 0.4);
+      --radius-lg: 18px;
+      --radius-md: 12px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      color: var(--txt);
+      background:
+        radial-gradient(900px 450px at 20% -20%, rgba(90, 157, 255, 0.2), transparent 60%),
+        radial-gradient(900px 450px at 90% -10%, rgba(79, 215, 255, 0.16), transparent 60%),
+        linear-gradient(180deg, var(--bg) 0%, #070d1a 55%, #050915 100%);
+      min-height: 100vh;
+    }
+
+    .wrap { width: min(1100px, 94vw); margin: 0 auto; }
+
+    .top {
+      position: sticky; top: 0; z-index: 30;
+      backdrop-filter: blur(10px);
+      background: rgba(6, 11, 22, 0.85);
+      border-bottom: 1px solid rgba(79, 215, 255, 0.14);
+    }
+    .top-in { min-height: 62px; display: flex; align-items: center; gap: 12px; }
+    .brand { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 0.95rem; letter-spacing: 0.02em; }
+    .brand span { color: var(--cyan); }
+
+    h1, h2, h3 { margin: 0; font-family: "Space Grotesk", sans-serif; }
+    h1 { font-size: clamp(1.42rem, 2.8vw, 2.1rem); line-height: 1.2; margin-bottom: 8px; }
+
+    .eyebrow {
+      font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--mint); font-weight: 700; margin-bottom: 10px;
+    }
+    .hero-text { max-width: 78ch; margin: 0; color: #cdd8f3; }
+
+    section { margin: 26px 0; }
+    .section-head { margin-bottom: 12px; }
+    .section-title { font-size: 1.25rem; color: #ecf3ff; }
+    .section-sub { margin-top: 5px; color: var(--muted); font-size: 14px; max-width: 88ch; }
+
+    .panel {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 18px;
+    }
+
+    .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
+    .kpi {
+      background: var(--card); border: 1px solid rgba(90, 157, 255, 0.28);
+      border-radius: var(--radius-md); padding: 15px; box-shadow: var(--shadow);
+    }
+    .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+    .kpi-value { margin-top: 4px; font-family: "Space Grotesk", sans-serif; font-size: 1.55rem; color: var(--txt); font-weight: 700; }
+    .kpi-note { margin-top: 3px; color: var(--muted); font-size: 12px; }
+
+    /* --- Tabla / cuadro --- */
+    .cuadro-wrap { overflow-x: auto; }
+    table.cuadro { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+    table.cuadro th, table.cuadro td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    table.cuadro thead th {
+      font-family: "Space Grotesk", sans-serif; font-size: 12px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #cfe0ff; background: var(--card-2);
+    }
+    table.cuadro tbody tr:hover { background: rgba(90, 157, 255, 0.06); }
+    .prov { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-family: "Space Grotesk", sans-serif; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .dot-azure { background: var(--cyan); }
+    .dot-gcp { background: var(--orange); }
+    .price { font-family: "Space Grotesk", sans-serif; font-weight: 700; }
+    .price-best { color: var(--mint); }
+    .price-normal { color: var(--blue); }
+    .price-worst { color: var(--red); }
+    .tools-cell { color: #c4d2f0; font-size: 13px; }
+    .badge-rec {
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 3px 8px; border-radius: 999px; margin-left: 8px;
+      background: rgba(79, 215, 255, 0.16); border: 1px solid rgba(79, 215, 255, 0.4); color: var(--cyan);
+    }
+
+    .cost-layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; margin-top: 16px; }
+    .cost-chart-wrap { height: 340px; position: relative; }
+    .cost-detail { background: var(--card-2); border: 1px solid rgba(90, 157, 255, 0.22); border-radius: 12px; padding: 16px; }
+    .cost-detail h3 { font-size: 1.05rem; color: #f0f4ff; margin-bottom: 2px; }
+    .cost-detail .cost-case { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--cyan); margin-bottom: 12px; }
+    .cost-block { border-top: 1px solid var(--line); padding: 10px 0; }
+    .cost-block:first-of-type { border-top: none; padding-top: 0; }
+    .cost-block b { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .cost-block span, .cost-block ul { color: #d8e3ff; font-size: 14px; font-weight: 700; font-family: "Space Grotesk", sans-serif; }
+    .cost-block ul { margin: 0; padding-left: 18px; font-size: 13px; font-weight: 500; font-family: "Manrope", sans-serif; color: #c4d2f0; }
+    .cost-block ul li { margin-bottom: 2px; }
+
+    .note {
+      margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+      background: rgba(57, 231, 196, 0.08); border: 1px solid rgba(57, 231, 196, 0.28);
+      color: #cdeee6; font-size: 13px;
+    }
+    .foot { color: var(--muted); font-size: 12px; margin: 30px 0 40px; max-width: 90ch; }
+
+    @media (max-width: 800px) {
+      .kpis { grid-template-columns: 1fr; }
+      .cost-layout { grid-template-columns: 1fr; }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="top-in wrap">
+      <span class="brand">Sistema Automatizado de Facturas <span>· Cuadro de costos de nube</span></span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section>
+      <p class="eyebrow">Comparativa de infraestructura · 200 facturas/mes</p>
+      <h1>Costo mensual de nube: Google Cloud vs Microsoft Azure</h1>
+      <p class="hero-text">
+        Estimado referencial del costo de infraestructura para operar el sistema de automatizacion de facturas
+        bajo un volumen aproximado de 200 facturas/mes (trafico bajo, picos cortos al recibir correos).
+        Son estimados basados en tarifas publicas de cada proveedor, no una cotizacion formal;
+        el costo real depende del uso exacto y puede variar.
+      </p>
+
+      <div class="kpis">
+        <div class="kpi">
+          <p class="kpi-label">Azure · caso normal</p>
+          <p class="kpi-value">USD 30 / mes</p>
+          <p class="kpi-note">≈ USD 360 / año · entorno actual de produccion</p>
+        </div>
+        <div class="kpi">
+          <p class="kpi-label">Google Cloud · caso normal</p>
+          <p class="kpi-value">USD 10 / mes</p>
+          <p class="kpi-note">≈ USD 120 / año · referencia comparativa</p>
+        </div>
+        <div class="kpi">
+          <p class="kpi-label">Rango total (ambos)</p>
+          <p class="kpi-value">USD 5 – 55 / mes</p>
+          <p class="kpi-note">Desde best case GCP hasta worst case Azure</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2 class="section-title">Cuadro comparativo de costos</h2>
+        <p class="section-sub">Tres escenarios por proveedor: best case (escala a cero, casi sin trafico), normal (operacion tipica del mes) y worst case (autoescalado por picos sostenidos).</p>
+      </div>
+      <div class="panel cuadro-wrap">
+        <table class="cuadro">
+          <thead>
+            <tr>
+              <th>Proveedor</th>
+              <th>Escenario</th>
+              <th>USD / mes</th>
+              <th>USD / año</th>
+              <th>Servicios incluidos</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td rowspan="3"><span class="prov"><span class="dot dot-azure"></span>Microsoft Azure<span class="badge-rec">Produccion</span></span></td>
+              <td>Best case</td>
+              <td><span class="price price-best">12</span></td>
+              <td>144</td>
+              <td class="tools-cell">Container Apps (escala a cero), Cosmos DB serverless, Blob Storage, Microsoft Entra ID</td>
+            </tr>
+            <tr>
+              <td>Normal case</td>
+              <td><span class="price price-normal">30</span></td>
+              <td>360</td>
+              <td class="tools-cell">Container Apps (1 instancia activa), Cosmos DB serverless, Blob Storage, Microsoft Entra ID</td>
+            </tr>
+            <tr>
+              <td>Worst case</td>
+              <td><span class="price price-worst">55</span></td>
+              <td>660</td>
+              <td class="tools-cell">Container Apps (autoescalado + picos), Cosmos DB (mayor RU), Blob Storage + logs, Microsoft Entra ID P1</td>
+            </tr>
+            <tr>
+              <td rowspan="3"><span class="prov"><span class="dot dot-gcp"></span>Google Cloud</span></td>
+              <td>Best case</td>
+              <td><span class="price price-best">5</span></td>
+              <td>60</td>
+              <td class="tools-cell">Cloud Run (escala a cero), Firestore (capa gratuita), Cloud Storage, Identity Platform</td>
+            </tr>
+            <tr>
+              <td>Normal case</td>
+              <td><span class="price price-normal">10</span></td>
+              <td>120</td>
+              <td class="tools-cell">Cloud Run (min instances), Firestore, Cloud Storage, Identity Platform</td>
+            </tr>
+            <tr>
+              <td>Worst case</td>
+              <td><span class="price price-worst">25</span></td>
+              <td>300</td>
+              <td class="tools-cell">Cloud Run (siempre activo), Firestore (mayor lectura/escritura), Cloud Storage + egress, Identity Platform (tier pago)</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="note">
+          <b>Nota:</b> el sistema esta desplegado actualmente sobre <b>Microsoft Azure</b>, alineado a que Alupar
+          opera su ecosistema corporativo (correo, identidad y gobierno de TI) sobre Microsoft 365 / Entra ID.
+          Google Cloud aparece como referencia de costo: es algo mas economico en infraestructura pura, pero implicaria
+          mantener un proveedor de nube adicional fuera del estandar corporativo de Alupar.
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2 class="section-title">Comparativa visual</h2>
+        <p class="section-sub">Pasa el cursor sobre una barra para ver el detalle, o haz click para fijarlo a la derecha.</p>
+      </div>
+      <div class="panel">
+        <div class="cost-layout">
+          <div class="cost-chart-wrap">
+            <canvas id="cloudCostChart"></canvas>
+          </div>
+          <div class="cost-detail" id="costDetail"></div>
+        </div>
+      </div>
+    </section>
+
+    <p class="foot">
+      Estimados elaborados sobre tarifas publicas de Microsoft Azure y Google Cloud vigentes a la fecha, para un volumen
+      aproximado de 200 facturas/mes. No constituyen una cotizacion formal ni un compromiso de precio; el costo real
+      depende del consumo efectivo, region, niveles de soporte contratados y eventuales descuentos corporativos.
+    </p>
+  </main>
+
+  <script>
+    const CLOUD_COST_DATA = {
+      azure: {
+        label: "Microsoft Azure",
+        color: "#4fd7ff",
+        cases: {
+          best:   { label: "Best case",   facturas: "200/mes",        monthly: 12, annual: 144, tools: ["Container Apps (escala a cero)", "Cosmos DB serverless", "Blob Storage", "Microsoft Entra ID"] },
+          normal: { label: "Normal case", facturas: "200/mes",        monthly: 30, annual: 360, tools: ["Container Apps (1 instancia activa)", "Cosmos DB serverless", "Blob Storage", "Microsoft Entra ID"] },
+          worst:  { label: "Worst case",  facturas: "200/mes + picos", monthly: 55, annual: 660, tools: ["Container Apps (autoescalado + picos)", "Cosmos DB (mayor RU)", "Blob Storage + logs", "Microsoft Entra ID P1"] },
+        },
+      },
+      gcp: {
+        label: "Google Cloud",
+        color: "#ff5a2a",
+        cases: {
+          best:   { label: "Best case",   facturas: "200/mes",        monthly: 5,  annual: 60,  tools: ["Cloud Run (escala a cero)", "Firestore (capa gratuita)", "Cloud Storage", "Identity Platform"] },
+          normal: { label: "Normal case", facturas: "200/mes",        monthly: 10, annual: 120, tools: ["Cloud Run (min instances)", "Firestore", "Cloud Storage", "Identity Platform"] },
+          worst:  { label: "Worst case",  facturas: "200/mes + picos", monthly: 25, annual: 300, tools: ["Cloud Run (siempre activo)", "Firestore (mayor lectura/escritura)", "Cloud Storage + egress", "Identity Platform (tier pago)"] },
+        },
+      },
+    };
+
+    const CASE_KEYS = ["best", "normal", "worst"];
+    const CASE_COLORS = { best: "#39e7c4", normal: "#5a9dff", worst: "#ff5f6d" };
+    const PROVIDER_KEYS = ["azure", "gcp"];
+
+    function renderCostDetail(providerKey, caseKey) {
+      const provider = CLOUD_COST_DATA[providerKey];
+      const data = provider.cases[caseKey];
+      document.getElementById("costDetail").innerHTML = `
+        <h3>${provider.label}</h3>
+        <p class="cost-case" style="color:${CASE_COLORS[caseKey]}">${data.label}</p>
+        <div class="cost-block"><b>Facturas estimadas</b><span>${data.facturas}</span></div>
+        <div class="cost-block"><b>Precio mensual / anual</b><span>USD ${data.monthly}/mes &nbsp;&middot;&nbsp; USD ${data.annual}/año</span></div>
+        <div class="cost-block"><b>Servicios usados</b><ul>${data.tools.map((t) => `<li>${t}</li>`).join("")}</ul></div>
+      `;
+    }
+
+    function buildCloudCostChart() {
+      const canvas = document.getElementById("cloudCostChart");
+      if (!canvas || typeof Chart === "undefined") return;
+
+      const datasets = CASE_KEYS.map((caseKey) => ({
+        label: CLOUD_COST_DATA.azure.cases[caseKey].label,
+        data: PROVIDER_KEYS.map((p) => CLOUD_COST_DATA[p].cases[caseKey].monthly),
+        backgroundColor: CASE_COLORS[caseKey],
+        borderRadius: 6,
+        caseKey,
+      }));
+
+      const chart = new Chart(canvas, {
+        type: "bar",
+        data: { labels: PROVIDER_KEYS.map((p) => CLOUD_COST_DATA[p].label), datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: (evt) => {
+            const points = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, true);
+            if (!points.length) return;
+            const point = points[0];
+            renderCostDetail(PROVIDER_KEYS[point.index], datasets[point.datasetIndex].caseKey);
+          },
+          plugins: {
+            legend: { labels: { color: "#c7d8f7", font: { size: 12 } } },
+            tooltip: {
+              backgroundColor: "rgba(8, 14, 28, 0.96)", titleColor: "#eef4ff", bodyColor: "#d6e8ff",
+              borderColor: "rgba(79, 215, 255, 0.25)", borderWidth: 1, padding: 12,
+              callbacks: {
+                label: (ctx) => {
+                  const data = CLOUD_COST_DATA[PROVIDER_KEYS[ctx.dataIndex]].cases[datasets[ctx.datasetIndex].caseKey];
+                  return `${data.label}: USD ${data.monthly}/mes (USD ${data.annual}/año)`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { grid: { color: "rgba(79, 215, 255, 0.08)" }, ticks: { color: "#c7d8f7", font: { size: 12, weight: "600" } } },
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(79, 215, 255, 0.08)" },
+              ticks: { color: "#c7d8f7", font: { size: 12 } },
+              title: { display: true, text: "USD / mes", color: "#dce8ff", font: { size: 12, weight: "600" } },
+            },
+          },
+        },
+      });
+
+      renderCostDetail("azure", "normal");
+    }
+
+    buildCloudCostChart();
+  </script>
+</body>
+</html>

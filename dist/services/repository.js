@@ -62,6 +62,10 @@ class LocalJsonRepository {
             return true;
         });
     }
+    async delete(id) {
+        const current = await this.readAll();
+        await this.writeAll(current.filter((entry) => entry.id !== id));
+    }
 }
 class CosmosRepository {
     client;
@@ -141,6 +145,10 @@ class CosmosRepository {
             .query(querySpec)
             .fetchAll();
         return resources;
+    }
+    async delete(id, empresa) {
+        const container = await this.getContainer();
+        await container.item(id, empresa).delete();
     }
 }
 function createRepository() {

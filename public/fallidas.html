@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Facturas fallidas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-in wrap">
+        <a class="brand" href="index.html">SISTEMA AUTOMATIZADO DE FACTURAS <span class="tag-live"><span class="dot"></span>Panel operativo</span></a>
+        <nav class="menu">
+          <a href="index.html">Dashboard</a>
+          <a href="coes.html">COES VTEA/VTP</a>
+          <a href="fallidas.html">Facturas fallidas</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap page-shell">
+      <section class="panel" id="fallidasPanel">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-copy">
+              <span class="toolbar-title">Facturas que fallaron al procesar</span>
+              <span class="toolbar-subtitle">El correo y los archivos quedaron guardados, pero la extraccion automatica de datos fallo. Revisa el correo y completa los datos manualmente.</span>
+            </div>
+          </div>
+        </div>
+
+        <p id="fallidasStatus" class="status-line"></p>
+        <div id="fallidasList" class="failed-list"></div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+    <script src="auth.js"></script>
+    <script src="fallidas.js"></script>
+  </body>
+</html>

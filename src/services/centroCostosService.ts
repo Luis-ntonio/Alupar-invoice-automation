@@ -2,7 +2,15 @@ import ExcelJS from "exceljs";
 import { ExtractedFields, CoesValidacion } from "../types";
 import { normalizeText } from "../utils/classifier";
 import { BlobStorageService } from "./blobStorage";
-import { CoesDataset, CoesSyncPeriod, extractInformeCode, findCoesIndexEntry, getExpectedStoragePath } from "./coesService";
+import {
+	CoesDataset,
+	CoesSyncPeriod,
+	extractInformeCode,
+	extractPeriodFromText,
+	getExpectedStoragePath,
+	shiftPeriod,
+	syncCoesMonthlyDataset,
+} from "./coesService";
 
 // TODO: completar con el RUC real de Alupar antes de confiar en produccion.
 const ALUPAR_RUC = "20492925030";
@@ -17,6 +25,7 @@ const NAME_COLUMN = 2; // columna B: nombre del proveedor (filas)
 const SUPPLIER_COLUMN = 3; // columna C: RUC del proveedor (filas)
 const DATA_START_COLUMN = 4; // columna D: inicio de los montos
 const AMOUNT_TOLERANCE = 0.01;
+const IGV_RATE = 0.18; // el monto de la factura incluye IGV; el excel COES reporta montos sin IGV
 
 export interface CentroCostosResult {
 	centroCostos?: string;
@@ -61,6 +70,39 @@ const RUC_PATTERN = /^\d{11}$/;
 
 function isValidRuc(value: string): boolean {
 	return RUC_PATTERN.test(value);
+}
+
+function formatMonto(value: number): string {
+	return value.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// El informe COES de un periodo (ej. abril) se publica/liquida recien al mes
+// siguiente, por lo que la fecha de emision de la factura suele caer un mes
+// despues del periodo que realmente hay que validar (factura emitida en mayo
+// -> informe de abril). Se parsea fechaEmision (ISO o DD/MM/YYYY) y se resta 1 mes.
+function parseFechaEmisionPeriod(fechaEmision: string | undefined | null): CoesSyncPeriod | undefined {
+	if (!fechaEmision) return undefined;
+
+	const isoMatch = fechaEmision.match(/^(\d{4})-(\d{2})-(\d{2})/);
+	if (isoMatch) {
+		const year = Number(isoMatch[1]);
+		const month = Number(isoMatch[2]);
+		if (Number.isFinite(year) && month >= 1 && month <= 12) {
+			return shiftPeriod({ year, month }, -1);
+		}
+	}
+
+	const dmyMatch = fechaEmision.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{2,4})/);
+	if (dmyMatch) {
+		const month = Number(dmyMatch[2]);
+		let year = Number(dmyMatch[3]);
+		if (year < 100) year += 2000;
+		if (Number.isFinite(year) && month >= 1 && month <= 12) {
+			return shiftPeriod({ year, month }, -1);
+		}
+	}
+
+	return undefined;
 }
 
 function cellToNumber(value: unknown): number | undefined {
@@ -179,8 +221,10 @@ async function crossCheckAmount(
 		return noEncontrado(dataset, montoFactura, informeCode, `No se encontro la hoja "${DATASET_SHEET[dataset]}" en el excel COES.`);
 	}
 
+	const montoSinIgv = montoFactura / (1 + IGV_RATE);
+
 	const buildResult = (montoEsperado: number): CoesValidacion => {
-		const coincide = Math.abs(montoEsperado - montoFactura) <= AMOUNT_TOLERANCE;
+		const coincide = Math.abs(montoEsperado - montoSinIgv) <= AMOUNT_TOLERANCE;
 		return {
 			dataset,
 			informeCode,
@@ -188,8 +232,8 @@ async function crossCheckAmount(
 			montoEsperado,
 			status: coincide ? "validado" : "no_coincide",
 			detalle: coincide
-				? `Monto coincide con el excel COES (${montoEsperado}).`
-				: `Monto de factura (${montoFactura}) no coincide con el excel COES (${montoEsperado}).`,
+				? `Monto sin IGV (${formatMonto(montoSinIgv)}) coincide con el excel COES (${formatMonto(montoEsperado)}).`
+				: `Monto de factura sin IGV (${formatMonto(montoSinIgv)}) no coincide con el excel COES (${formatMonto(montoEsperado)}).`,
 		};
 	};
 
@@ -247,23 +291,39 @@ export async function resolveCentroCostos(
 	const supplierRuc = extracted.ruc ?? "";
 	const informeCode = extractInformeCode(extracted.concepto ?? extracted.rawTextSnippet);
 
-	if (!informeCode) {
+	// El periodo a validar se determina por la fecha de emision de la factura
+	// (informe del mes anterior), no por el ultimo informe sincronizado: una
+	// factura de mayo debe validarse contra el informe de abril aunque ya
+	// tengamos sincronizado el de mayo. Si fechaEmision no es parseable, se cae
+	// al periodo extraido del texto del concepto como respaldo.
+	const period = parseFechaEmisionPeriod(extracted.fechaEmision) ?? extractPeriodFromText(extracted.concepto ?? extracted.rawTextSnippet);
+
+	if (!period) {
 		return {
 			centroCostos,
-			coesValidacion: noEncontrado(dataset, montoFactura, undefined, "No se pudo extraer el codigo de informe COES del concepto de la factura."),
+			coesValidacion: noEncontrado(dataset, montoFactura, informeCode, "No se pudo determinar el periodo (mes/año) a validar a partir de la fecha de emision ni del concepto de la factura."),
 		};
 	}
 
-	const indexEntry = await findCoesIndexEntry(dataset, informeCode, blobStorage);
-	if (!indexEntry) {
+	let storagePath: string | undefined;
+	try {
+		const result = await syncCoesMonthlyDataset(dataset, period, blobStorage);
+		if (result.status === "not_available" || !result.storagePath) {
+			return {
+				centroCostos,
+				coesValidacion: noEncontrado(dataset, montoFactura, informeCode, `No se encontro el excel COES para ${dataset.toUpperCase()} ${period.month}/${period.year}.`),
+			};
+		}
+		storagePath = result.storagePath;
+	} catch (err) {
 		return {
 			centroCostos,
-			coesValidacion: noEncontrado(dataset, montoFactura, informeCode, `No se encontro el excel COES para el informe ${informeCode}.`),
+			coesValidacion: noEncontrado(dataset, montoFactura, informeCode, `Error buscando el excel COES en COES para ${period.month}/${period.year}: ${err instanceof Error ? err.message : String(err)}`),
 		};
 	}
 
 	try {
-		const coesValidacion = await crossCheckAmount(dataset, indexEntry.storagePath, supplierRuc, montoFactura, informeCode, blobStorage);
+		const coesValidacion = await crossCheckAmount(dataset, storagePath, supplierRuc, montoFactura, informeCode, blobStorage);
 		return { centroCostos, coesValidacion };
 	} catch (err) {
 		return {

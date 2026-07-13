@@ -125,7 +125,7 @@ Microsoft Azure proporciona la infraestructura en la nube donde se centraliza la
   - **Extracción nativa desde XML UBL 2.1:** los comprobantes electrónicos SUNAT se parsean directamente sin servicios externos, extrayendo: RUC del emisor, nombre del emisor, número de comprobante, fecha de emisión y vencimiento, monto, moneda, tipo de documento (factura/boleta/nota), concepto y receptor.
   - **Soporte ZIP:** los portales como efacturacion.pe entregan comprobantes en archivos ZIP. El sistema descomprime automáticamente y procesa los XML y PDF contenidos.
   - **Validación SUNAT en tiempo real:** cada comprobante se consulta contra el portal libre de SUNAT (`consultaUnificadaLibre`) para obtener el estado del comprobante (ACEPTADO / ANULADO / NO EXISTE), el estado del contribuyente (ACTIVO / BAJA DEFINITIVA / etc.) y la condición de domicilio (HABIDO / NO HABIDO / etc.).
-  - **Prevalidación de montos COES:** para facturas de Peajes y transferencias COES (VTEA/VTP), el sistema descarga automáticamente las liquidaciones mensuales oficiales de COES, identifica el informe correspondiente y cruza el monto facturado contra el RUC de Alupar en la matriz oficial, marcando el resultado (validado, no coincide, no encontrado) sin bloquear el procesamiento.
+  - **Prevalidación de montos COES:** para facturas de Peajes y transferencias COES (VTEA/VTP), el sistema descarga automáticamente las liquidaciones mensuales oficiales de COES, identifica el informe correspondiente y cruza el monto facturado contra el RUC de Alupar en la matriz oficial, marcando el resultado (validado, no coincide, no encontrado) sin bloquear el procesamiento. El cruce considera el IGV (18%): las liquidaciones COES reportan montos sin IGV, por lo que el sistema descuenta el impuesto del monto facturado antes de comparar, evitando falsos descuadres.
   - Busca en la tabla de referencias para identificar la empresa remitente a partir del RUC extraído o del dominio del correo.
   - Asigna departamento responsable basándose en el tipo de documento y empresa origen.
   - Genera sugerencias de derivación que se presentan en el panel web.
@@ -136,12 +136,14 @@ Microsoft Azure proporciona la infraestructura en la nube donde se centraliza la
 
   - Almacena los documentos adjuntos (PDF, XML, imágenes) y los excels mensuales de COES en almacenamiento en la nube para acceso futuro sin depender de que el correo original esté disponible.
   - El panel permite exportar la selección de facturas a un archivo Excel (.xlsx) directamente desde el navegador, útil como respaldo o para análisis posterior.
+  - También permite generar un **ZIP consolidado** con los documentos de las facturas seleccionadas, organizados por empresa, con una ventana de selección que deja elegir qué archivos de cada factura incluir en la descarga.
 - **Azure Container Apps (panel web de usuario final):**
 
-  - Un panel web accesible desde navegador que muestra el resumen de facturas: tabla con empresa, remitente, fecha, tipo, estado, monto (si está extraído).
-  - Funcionalidades: ordenar por columnas, filtrar por empresa/departamento/fecha, ver detalles de cada documento, cambiar clasificación manual si es necesario, marcar como "derivado", agregar notas.
-  - Vista dedicada para COES: resumen de las contrapartes de Alupar (cobra/paga), gráfico comparativo de montos y verificador manual de cruce por RUC y periodo.
-  - El panel se actualiza en tiempo real conforme llegan nuevos correos a Workato, y el acceso está protegido con inicio de sesión corporativo (Microsoft Entra ID).
+  - Un panel web accesible desde navegador que muestra el resumen de facturas: tabla con empresa, remitente, fecha, tipo, estado, monto con IGV y monto sin IGV (si está extraído).
+  - Funcionalidades: ordenar por columnas, filtrar por empresa/departamento/fecha, ver detalles de cada documento (incluida la previsualización del correo original), cambiar clasificación manual si es necesario, marcar como "derivado", agregar notas.
+  - Vista dedicada para COES: resumen de las contrapartes de Alupar (cobra/paga), gráfico comparativo de montos, histórico por empresa al hacer clic y verificador manual de cruce por RUC y periodo (mostrando el monto con y sin IGV).
+  - **Vista de facturas fallidas:** los documentos que no se pudieron procesar automáticamente no se pierden; se listan en una vista aparte mostrando el remitente, la hora del correo, el mensaje de error y una previsualización del cuerpo del correo. Desde ahí se pueden "llenar los datos manualmente" para completar la información faltante y enviar el registro al flujo normal del dashboard.
+  - El panel se actualiza en tiempo real conforme llegan nuevos correos a Workato (vía WebSocket), y el acceso está protegido con inicio de sesión corporativo (Microsoft Entra ID).
 
 #### Integración y flujo de datos
 
@@ -161,6 +163,8 @@ El flujo completo funciona así:
 9. Guarda el adjunto original en Azure Blob Storage.
 10. El panel web refleja la nueva factura con toda la información compilada, incluyendo las validaciones SUNAT y COES.
 11. El usuario responsable ve el resumen, valida la clasificación (o la ajusta), y marca como "listo para derivar".
+
+> **Resiliencia ante fallos:** si la extracción automática de un documento falla (XML mal formado, PDF sin texto, etc.), el correo y sus adjuntos se almacenan igualmente con estado de error en lugar de descartarse. Esos casos aparecen en la vista de facturas fallidas, donde el usuario puede revisar el cuerpo del correo y completar los datos manualmente para incorporarlos al flujo normal, garantizando que ningún documento se pierda.
 
 ## 4. Beneficios de la solución
 
@@ -193,11 +197,14 @@ El flujo completo funciona así:
    - Inicio de sesión corporativo con Microsoft Entra ID.
    - Integración con Workato para recibir archivos binarios y procesarlos en tiempo real.
 4. **Desarrollo del panel web de usuario:**
-   - Tabla de facturas con información compilada: empresa, remitente, fecha, tipo, monto, estado.
+   - Tabla de facturas con información compilada: empresa, remitente, fecha, tipo, monto con IGV, monto sin IGV, estado.
    - Funcionalidades: filtros por empresa/departamento/fecha, búsqueda, ordenamiento.
    - Capacidad de editar clasificación manualmente y registrar cambios.
    - Botón para marcar como "derivado" y registrar hacia qué equipo.
    - Vista de detalles para ver correo original, adjuntos, datos extraídos.
+   - Exportación a Excel (.xlsx) y a ZIP consolidado con selección de archivos por factura.
+   - Vista de facturas fallidas con previsualización del correo y llenado manual de datos.
+   - Vista COES con histórico por empresa y verificador manual de montos por RUC (con y sin IGV).
 5. **Base de referencias inicial:**
    - Mapeo de dominios de correo a empresas.
    - Asignación de departamentos responsables por tipo de documento (factura o comprobante) y empresa.
@@ -305,7 +312,7 @@ Se da soporte inicial durante 5 días calendario para responder preguntas, resol
 
 ### Infraestructura en la nube (Microsoft Azure)
 
-La infraestructura en Microsoft Azure requerida para operar el sistema (Container Apps, Cosmos DB, Blob Storage, Microsoft Entra ID) tiene un costo estimado de **USD 12-40 por mes** para un volumen de referencia de 200 facturas mensuales, dependiendo de si la aplicación se mantiene siempre activa o con autoescalado a cero fuera de horas de uso. Al procesar documentos XML de forma nativa sin servicios de visión artificial o machine learning, el costo operativo se reduce significativamente respecto a arquitecturas que dependen de Document AI o Vision API. Una comparativa de este mismo estimado contra Google Cloud y AWS está disponible en la página de arquitectura del proyecto.
+La infraestructura en Microsoft Azure requerida para operar el sistema (Container Apps, Cosmos DB, Blob Storage, Microsoft Entra ID) tiene un costo estimado de **USD 12-55 por mes** para un volumen de referencia de 200 facturas mensuales, según el escenario de uso: desde USD 12/mes en el mejor caso (autoescalado a cero fuera de horas de uso) hasta USD 55/mes en el peor caso (aplicación siempre activa con autoescalado por picos sostenidos); el escenario de operación normal se ubica alrededor de USD 30/mes. Al procesar documentos XML de forma nativa sin servicios de visión artificial o machine learning, el costo operativo se reduce significativamente respecto a arquitecturas que dependen de Document AI o Vision API. Una comparativa de este mismo estimado contra Google Cloud está disponible en el cuadro de costos del proyecto.
 
 Se propone completar el desarrollo, pruebas y entrega en esta propuesta. Los costos operativos mensuales de infraestructura serán responsabilidad del cliente (facturable directamente por Microsoft Azure). La validación de comprobantes contra SUNAT y la descarga de liquidaciones COES utilizan portales públicos y no generan costo adicional.
 

@@ -9,6 +9,7 @@ export interface RecordRepository {
   findById(id: string): Promise<EmailRecord | null>;
   findByMessageId(messageId: string): Promise<EmailRecord | null>;
   list(filters?: Partial<Pick<EmailRecord, "documentType" | "concept" | "status">>): Promise<EmailRecord[]>;
+  delete(id: string, empresa: string): Promise<void>;
 }
 
 class LocalJsonRepository implements RecordRepository {
@@ -65,6 +66,11 @@ class LocalJsonRepository implements RecordRepository {
       if (filters.status && entry.status !== filters.status) return false;
       return true;
     });
+  }
+
+  async delete(id: string): Promise<void> {
+    const current = await this.readAll();
+    await this.writeAll(current.filter((entry) => entry.id !== id));
   }
 }
 
@@ -155,6 +161,11 @@ class CosmosRepository implements RecordRepository {
       .query<EmailRecord>(querySpec)
       .fetchAll();
     return resources;
+  }
+
+  async delete(id: string, empresa: string): Promise<void> {
+    const container = await this.getContainer();
+    await container.item(id, empresa).delete();
   }
 }
 

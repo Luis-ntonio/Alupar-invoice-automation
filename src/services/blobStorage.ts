@@ -90,6 +90,18 @@ export class BlobStorageService {
     return createReadStream(path.join(config.localStorageDir, storagePath));
   }
 
+  async delete(storagePath: string): Promise<void> {
+    if (config.storageMode === "azure") {
+      const container = await this.getContainerClient(config.azureStorageContainerRaw);
+      const blockBlob = container.getBlockBlobClient(storagePath);
+      await blockBlob.deleteIfExists();
+      return;
+    }
+
+    const localTarget = path.join(config.localStorageDir, storagePath);
+    await fs.rm(localTarget, { force: true });
+  }
+
   async saveExport(localZipPath: string, requestId: string, concept: string): Promise<string> {
     const exportPath = `exports/${requestId}/${sanitizeFileName(concept)}.zip`;
 

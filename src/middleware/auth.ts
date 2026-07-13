@@ -24,7 +24,7 @@ function getKey(header: jwt.JwtHeader, callback: jwt.SigningKeyCallback): void {
   });
 }
 
-function isEmailAllowed(email: string): boolean {
+export function isEmailAllowed(email: string): boolean {
   if (!email) return false;
   const lower = email.toLowerCase();
 
@@ -36,6 +36,33 @@ function isEmailAllowed(email: string): boolean {
   if (domains.some((d) => lower.endsWith("@" + d))) return true;
   if (emails.includes(lower)) return true;
   return false;
+}
+
+// Reusable para requireAuth (HTTP) y para la autenticacion del WebSocket de
+// tiempo real (src/services/realtime.ts), que no puede usar este middleware
+// porque el handshake de WS no pasa por el pipeline de Express.
+export function verifyAccessToken(token: string): Promise<jwt.JwtPayload> {
+  return new Promise((resolve, reject) => {
+    jwt.verify(
+      token,
+      getKey,
+      {
+        // Azure AD puede emitir el aud como "api://{clientId}" o como el GUID
+        // pelado, segun como se resuelva el recurso al momento de emitir el
+        // token v2.0 (mismo App Registration, ambas formas son validas).
+        audience: [`api://${config.azureAdClientId ?? ""}`, config.azureAdClientId ?? ""],
+        issuer: `https://login.microsoftonline.com/${config.azureAdTenantId ?? ""}/v2.0`,
+        algorithms: ["RS256"],
+      },
+      (err: jwt.VerifyErrors | null, decoded: jwt.JwtPayload | string | undefined) => {
+        if (err || !decoded) {
+          reject(err ?? new Error("Token invalido."));
+          return;
+        }
+        resolve(decoded as jwt.JwtPayload);
+      }
+    );
+  });
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
@@ -51,32 +78,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
 
   const token = auth.slice(7);
-  jwt.verify(
-    token,
-    getKey,
-    {
-      // Azure AD puede emitir el aud como "api://{clientId}" o como el GUID
-      // pelado, segun como se resuelva el recurso al momento de emitir el
-      // token v2.0 (mismo App Registration, ambas formas son validas).
-      audience: [`api://${config.azureAdClientId}`, config.azureAdClientId],
-      issuer: `https://login.microsoftonline.com/${config.azureAdTenantId}/v2.0`,
-      algorithms: ["RS256"],
-    },
-    (err, decoded) => {
-      if (err) {
-        const unverified = jwt.decode(token) as jwt.JwtPayload | null;
-        console.warn("[auth] jwt.verify fallo:", err.name, err.message, {
-          expectedAudience: `api://${config.azureAdClientId}`,
-          expectedIssuer: `https://login.microsoftonline.com/${config.azureAdTenantId}/v2.0`,
-          actualAudience: unverified?.aud,
-          actualIssuer: unverified?.iss,
-          actualVersion: (unverified as any)?.ver,
-          actualTid: (unverified as any)?.tid,
-        });
-        res.status(401).json({ error: "Token invalido o expirado." });
-        return;
-      }
-      const payload = decoded as jwt.JwtPayload;
+  verifyAccessToken(token)
+    .then((payload) => {
       const email = (payload["email"] || payload["preferred_username"] || "") as string;
 
       if ((config.allowedDomains || config.allowedEmails) && !isEmailAllowed(email)) {
@@ -93,6 +96,17 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
       (req as any).user = payload;
       next();
-    }
-  );
+    })
+    .catch((err) => {
+      const unverified = jwt.decode(token) as jwt.JwtPayload | null;
+      console.warn("[auth] jwt.verify fallo:", err?.name, err?.message, {
+        expectedAudience: `api://${config.azureAdClientId}`,
+        expectedIssuer: `https://login.microsoftonline.com/${config.azureAdTenantId}/v2.0`,
+        actualAudience: unverified?.aud,
+        actualIssuer: unverified?.iss,
+        actualVersion: (unverified as any)?.ver,
+        actualTid: (unverified as any)?.tid,
+      });
+      res.status(401).json({ error: "Token invalido o expirado." });
+    });
 }

@@ -9,16 +9,21 @@ import { detectFileType, extractFields } from "./services/parser";
 import { createRepository } from "./services/repository";
 import { CoesDataset, runCoesAutoSync, syncCoesMonthlyRequiredFiles, listCoesIndex } from "./services/coesService";
 import { resolveCentroCostos, getCoesMatrixForPeriod, verifyCoesAmountForPeriod } from "./services/centroCostosService";
+import { resolveCentroCostosCode } from "./services/centroCostosCatalog";
 import { validarEnSunat } from "./services/sunatService";
 import { extractSupportedZipEntries, extractZipContents, filterAccessibleFiles, streamZipToWritable } from "./services/zipService";
 import { classifyDocument, inferConcept } from "./utils/classifier";
 import { createSha256 } from "./utils/hash";
 import { AttachedFile, EmailRecord, ExtractedFields, IncomingMetadata, SunatValidacion } from "./types";
 import { requireAuth } from "./middleware/auth";
+import { broadcastDocumentDeleted, broadcastDocumentUpdated, broadcastNewDocument } from "./services/realtime";
 
-// fieldSize de 25MB: Workato envía archivos como hex en campos de texto
-// (1 byte → 2 chars hex), por lo que un PDF de 10MB ocupa ~20MB como texto.
-const upload = multer({ storage: multer.memoryStorage(), limits: { fieldSize: 25 * 1024 * 1024 } });
+// fieldSize de 100MB: Workato envía archivos como hex en campos de texto
+// (1 byte → 2 chars hex), por lo que un PDF ocupa ~2x como texto. Con 100MB
+// caben PDFs de ~50MB antes de que multer trunque el campo silenciosamente.
+// Trade-off: memoryStorage retiene todo el payload en RAM del Container App,
+// asi que subir mucho mas este limite presiona la memoria de la instancia.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fieldSize: 100 * 1024 * 1024 } });
 const router = express.Router();
 const repository = createRepository();
 const blobStorage = new BlobStorageService();
@@ -562,6 +567,11 @@ function ensureAuthorized(
   return { authorized: true };
 }
 
+function pickStringField(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  return undefined;
+}
+
 function normalizeIncomingMetadata(body: Record<string, unknown>): IncomingMetadata {
   const bodyNorm = { ...body, receivedAt: body.receivedAt ?? body.recievedAt };
   const metadataResult = metadataSchema.safeParse(bodyNorm);
@@ -570,9 +580,21 @@ function normalizeIncomingMetadata(body: Record<string, unknown>): IncomingMetad
   const data = metadataResult.data;
   const emailBodyHtml = data.bodyHtml ?? data.emailBodyHtml ?? data.html ?? data.body;
   const bodyText = data.bodyText;
+  const sender =
+    pickStringField(data.sender) ??
+    pickStringField(body.from) ??
+    pickStringField(body.From) ??
+    pickStringField(body.emailFrom) ??
+    pickStringField(body.remitente) ??
+    pickStringField(body.senderEmail);
+
+  if (!sender) {
+    console.warn("[intake] metadata.sender no llego en el body. Campos recibidos:", Object.keys(body));
+  }
 
   return {
     ...data,
+    sender,
     bodyHtml: emailBodyHtml,
     bodyText,
     body: data.body,
@@ -660,6 +682,14 @@ async function expandSupportedFiles(files: Express.Multer.File[]): Promise<Expre
   return expandedFiles;
 }
 
+// Detecta si un XML es un CDR de SUNAT (<ApplicationResponse>, a veces con
+// prefijo ar:). El nombre del elemento raiz es ASCII y aparece al inicio del
+// documento, asi que basta inspeccionar el encabezado sin parsear todo el XML.
+function isSunatCdr(buffer: Buffer): boolean {
+  const head = buffer.toString("latin1", 0, 2048);
+  return /<(?:\w+:)?ApplicationResponse[\s>]/.test(head);
+}
+
 async function processIntakeFiles(files: Express.Multer.File[], metadata: IncomingMetadata): Promise<IntakeSuccessResult | IntakeErrorResult> {
   if (metadata.messageId) {
     const existing = await repository.findByMessageId(metadata.messageId);
@@ -694,9 +724,13 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
   let extractionError: string | undefined;
   try {
     const xmlFiles = expandedFiles.filter((f) => detectFileType(f.originalname, f.mimetype, f.buffer) === "xml");
+    // El CDR (ApplicationResponse de SUNAT) no trae datos financieros y solo
+    // devuelve rawTextSnippet; se excluye del merge para no pisar el snippet de
+    // la factura real. El archivo del CDR se guarda igual como adjunto.
+    const invoiceXmlFiles = xmlFiles.filter((f) => !isSunatCdr(f.buffer));
     const pdfFile = expandedFiles.find((f) => detectFileType(f.originalname, f.mimetype, f.buffer) === "pdf");
-    if (xmlFiles.length > 0) {
-      for (const xmlFile of xmlFiles) {
+    if (invoiceXmlFiles.length > 0) {
+      for (const xmlFile of invoiceXmlFiles) {
         const result = await extractFields("xml", xmlFile.buffer, xmlFile.mimetype);
         for (const [k, v] of Object.entries(result)) {
           if (v !== undefined && v !== null && v !== "") {
@@ -714,11 +748,24 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
   const documentType = classifyDocument(extracted);
   const concept = (extracted as any).concepto ?? inferConcept(extracted);
 
+  // resolveCentroCostos se conserva por la validacion de monto COES (coesValidacion).
+  // El valor de centroCostos ya NO se toma de aqui: ahora se deriva del concepto
+  // via catalogo por keywords y solo aplica a facturas (ver mas abajo).
   const centroCostosResult: { centroCostos?: string; coesValidacion?: EmailRecord["coesValidacion"] } =
     await resolveCentroCostos(extracted as ExtractedFields, blobStorage).catch((err) => {
       console.warn("[centroCostos] Resolucion fallo:", err instanceof Error ? err.message : err);
       return {};
     });
+
+  // Centro de costos: dependiente del concepto y solo para facturas. Se usa el
+  // texto del concepto (+ snippet como respaldo) para el match best-effort; si no
+  // hay coincidencia queda vacio para asignacion manual desde el dashboard.
+  const centroCostos =
+    documentType === "factura"
+      ? resolveCentroCostosCode(
+          [(extracted as any).concepto, (extracted as any).rawTextSnippet].filter(Boolean).join(" ")
+        )
+      : undefined;
 
   let sunatValidacion: SunatValidacion | undefined;
   const numDoc = (extracted as any).numeroDocumento as string | undefined;
@@ -755,7 +802,7 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
     documentType,
     concept,
     empresa: (extracted as any).emisor ?? "",
-    centroCostos: centroCostosResult.centroCostos,
+    centroCostos,
     ruc: (extracted as any).ruc ?? "",
     sunatValidacion,
     coesValidacion: centroCostosResult.coesValidacion,
@@ -766,6 +813,7 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
   };
 
   await repository.save(record);
+  broadcastNewDocument(record);
   return {
     statusCode: 202,
     body: { requestId, accepted: attachedFiles.length, rejected, record },
@@ -1008,11 +1056,36 @@ router.get("/documents/:id", requireAuth, async (req, res) => {
   return res.json(item);
 });
 
+router.delete("/documents/:id", requireAuth, async (req, res) => {
+  const item = await repository.findById(req.params.id);
+  if (!item) {
+    return res.status(404).json({ error: "Documento no encontrado." });
+  }
+
+  for (const file of item.files) {
+    try {
+      await blobStorage.delete(file.sourcePath);
+    } catch (err) {
+      console.warn(`[documents] No se pudo borrar el archivo ${file.sourcePath}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  await repository.delete(item.id, item.empresa);
+  broadcastDocumentDeleted(item.id);
+  return res.status(204).end();
+});
+
 const updateDocumentSchema = z.object({
   empresa: z.string().trim().min(1).optional(),
   documentType: z.enum(["factura", "comprobante", "nota", "desconocido"]).optional(),
   centroCostos: z.string().trim().min(1).optional(),
   monto: z.number().finite().nonnegative().nullable().optional(),
+  ruc: z.string().trim().optional(),
+  concept: z.string().trim().optional(),
+  fechaEmision: z.string().trim().optional(),
+  fechaVencimiento: z.string().trim().optional(),
+  numeroDocumento: z.string().trim().optional(),
+  resolveError: z.boolean().optional(),
 });
 
 router.patch("/documents/:id", requireAuth, async (req, res) => {
@@ -1032,14 +1105,24 @@ router.patch("/documents/:id", requireAuth, async (req, res) => {
     empresa: payload.empresa ?? current.empresa,
     documentType: payload.documentType ?? current.documentType,
     centroCostos: payload.centroCostos ?? current.centroCostos,
+    ruc: payload.ruc ?? current.ruc,
+    concept: payload.concept ?? current.concept,
     extracted: {
       ...current.extracted,
       monto: payload.monto === undefined ? current.extracted?.monto : payload.monto ?? undefined,
+      ruc: payload.ruc ?? current.extracted?.ruc,
+      concepto: payload.concept ?? current.extracted?.concepto,
+      fechaEmision: payload.fechaEmision ?? current.extracted?.fechaEmision,
+      fechaVencimiento: payload.fechaVencimiento ?? current.extracted?.fechaVencimiento,
+      numeroDocumento: payload.numeroDocumento ?? current.extracted?.numeroDocumento,
     },
+    status: payload.resolveError ? "pendiente" : current.status,
+    error: payload.resolveError ? undefined : current.error,
     updatedAt: new Date().toISOString(),
   };
 
   await repository.save(updated);
+  broadcastDocumentUpdated(updated);
   return res.json({ item: updated });
 });
 
@@ -1086,17 +1169,34 @@ router.get("/documents/:id/file", async (req, res) => {
   }
 });
 
+const exportSelectionSchema = z.object({
+  id: z.string(),
+  fileNames: z.array(z.string()).optional(),
+});
+
 router.post("/exports", requireAuth, async (req, res) => {
-  const ids: unknown = req.body.ids;
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(400).json({ error: "Se requiere un array de IDs en el campo ids." });
+  let selections: Array<{ id: string; fileNames?: string[] }>;
+
+  if (Array.isArray(req.body.items)) {
+    const parsed = z.array(exportSelectionSchema).safeParse(req.body.items);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Payload invalido en el campo items." });
+    }
+    selections = parsed.data;
+  } else if (Array.isArray(req.body.ids)) {
+    selections = (req.body.ids as unknown[]).filter((id): id is string => typeof id === "string").map((id) => ({ id }));
+  } else {
+    return res.status(400).json({ error: "Se requiere un array de items (o ids) para exportar." });
   }
 
-  const records: EmailRecord[] = [];
-  for (const id of ids) {
-    if (typeof id !== "string") continue;
-    const rec = await repository.findById(id);
-    if (rec) records.push(rec);
+  if (!selections.length) {
+    return res.status(400).json({ error: "Se requiere al menos un documento para exportar." });
+  }
+
+  const records: Array<{ record: EmailRecord; fileNames?: string[] }> = [];
+  for (const sel of selections) {
+    const rec = await repository.findById(sel.id);
+    if (rec) records.push({ record: rec, fileNames: sel.fileNames });
   }
 
   if (!records.length) {
@@ -1104,7 +1204,7 @@ router.post("/exports", requireAuth, async (req, res) => {
   }
 
   const usedRecordFolders = new Map<string, number>();
-  const allRefs = records.flatMap((record) => {
+  const allRefs = records.flatMap(({ record, fileNames }) => {
     const empresaFolder = folderName(record.empresa || "SIN EMPRESA");
     const recordBase = folderName(record.extracted?.numeroDocumento || record.id || "registro");
     const recordKey = `${empresaFolder}/${recordBase}`;
@@ -1112,7 +1212,9 @@ router.post("/exports", requireAuth, async (req, res) => {
     usedRecordFolders.set(recordKey, seen);
     const recordFolder = seen > 1 ? `${recordBase}_${seen}` : recordBase;
 
-    return record.files.map((file) => ({
+    const filesToInclude = fileNames ? record.files.filter((file) => fileNames.includes(file.fileName)) : record.files;
+
+    return filesToInclude.map((file) => ({
       fileName: file.fileName,
       sourcePath: file.sourcePath,
       zipPath: `${empresaFolder}/${recordFolder}/${file.fileName}`,
@@ -1139,8 +1241,8 @@ router.post("/exports", requireAuth, async (req, res) => {
   }
 
   const now = new Date().toISOString();
-  for (const rec of records) {
-    await repository.save({ ...rec, status: "procesado", updatedAt: now });
+  for (const { record } of records) {
+    await repository.save({ ...record, status: "procesado", updatedAt: now });
   }
 });
 

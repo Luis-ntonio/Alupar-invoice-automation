@@ -93,7 +93,7 @@ async function extractFromXml(buffer) {
     };
 }
 function getBusinessDocument(parsed) {
-    const document = parsed["Invoice"] ?? parsed["DebitNote"] ?? parsed;
+    const document = parsed["Invoice"] ?? parsed["DebitNote"] ?? parsed["CreditNote"] ?? parsed;
     return (document ?? parsed);
 }
 // Algunos emisores (ej. generadoras electricas) declaran namespaces UBL con
@@ -116,12 +116,19 @@ function findChild(obj, name) {
     return undefined;
 }
 function getFirstDocumentLine(document) {
-    const line = findChild(document, "InvoiceLine") ?? findChild(document, "DebitNoteLine");
+    const line = findChild(document, "InvoiceLine") ??
+        findChild(document, "DebitNoteLine") ??
+        findChild(document, "CreditNoteLine");
     return Array.isArray(line) ? line[0] : line;
 }
 function getDocumentTypeFallback(parsed, document) {
     if (parsed["DebitNote"] != null) {
         return "08";
+    }
+    // Las notas de credito UBL rara vez traen cbc:CreditNoteTypeCode; el tipo lo
+    // determina el elemento raiz <CreditNote>. Se mapea a "07" (nota de credito).
+    if (parsed["CreditNote"] != null) {
+        return "07";
     }
     return (getStringValue(findChild(document, "CreditNoteTypeCode")) ??
         getStringValue(findChild(document, "DebitNoteTypeCode")) ??

@@ -83,6 +83,16 @@ class BlobStorageService {
         }
         return (0, node_fs_1.createReadStream)(node_path_1.default.join(config_1.config.localStorageDir, storagePath));
     }
+    async delete(storagePath) {
+        if (config_1.config.storageMode === "azure") {
+            const container = await this.getContainerClient(config_1.config.azureStorageContainerRaw);
+            const blockBlob = container.getBlockBlobClient(storagePath);
+            await blockBlob.deleteIfExists();
+            return;
+        }
+        const localTarget = node_path_1.default.join(config_1.config.localStorageDir, storagePath);
+        await node_fs_1.promises.rm(localTarget, { force: true });
+    }
     async saveExport(localZipPath, requestId, concept) {
         const exportPath = `exports/${requestId}/${sanitizeFileName(concept)}.zip`;
         if (config_1.config.storageMode === "azure") {

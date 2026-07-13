@@ -36,14 +36,22 @@ export function classifyDocument(fields: ExtractedFields): DocumentType {
       .join(" ")
   );
 
-  if (content.includes("factura") || content.includes("invoice")) {
+  // Fallback textual SOLO en espanol (el texto proviene de comprobantes SUNAT).
+  // La clasificacion primaria es por codigo SUNAT (arriba); esto es red de seguridad.
+  // Se evalua "nota" primero: una nota de credito/debito suele mencionar la
+  // "factura" que rectifica, y no debe clasificarse como factura por eso.
+  if (
+    content.includes("nota de credito") ||
+    content.includes("nota de debito") ||
+    content.includes("nota")
+  ) {
+    return "nota";
+  }
+  if (content.includes("factura")) {
     return "factura";
   }
-  if (content.includes("comprobante") || content.includes("boleta") || content.includes("receipt")) {
+  if (content.includes("comprobante") || content.includes("boleta")) {
     return "comprobante";
-  }
-  if (content.includes("nota de credito") || content.includes("nota de debito") || content.includes("nota")) {
-    return "nota";
   }
   return "desconocido";
 }

@@ -7,11 +7,15 @@ exports.extractInformeCode = extractInformeCode;
 exports.findCoesIndexEntry = findCoesIndexEntry;
 exports.listCoesIndex = listCoesIndex;
 exports.getExpectedStoragePath = getExpectedStoragePath;
+exports.extractPeriodFromText = extractPeriodFromText;
+exports.syncCoesMonthlyDataset = syncCoesMonthlyDataset;
 exports.syncCoesMonthlyExcel = syncCoesMonthlyExcel;
 exports.syncCoesMonthlyVtpReport = syncCoesMonthlyVtpReport;
+exports.shiftPeriod = shiftPeriod;
 exports.syncCoesMonthlyRequiredFiles = syncCoesMonthlyRequiredFiles;
 exports.runCoesAutoSync = runCoesAutoSync;
 const exceljs_1 = __importDefault(require("exceljs"));
+const classifier_1 = require("../utils/classifier");
 const blobStorage_1 = require("./blobStorage");
 const COES_INDEX_PATH = "coes/coes-index.json";
 const INFORME_CODE_REGEX = /COES\/D\/DO\/SME-INF-\d+-\d{4}/i;
@@ -99,6 +103,25 @@ const MONTH_NAMES_ES = [
 ];
 function monthNameEs(month) {
     return MONTH_NAMES_ES[month - 1] ?? "";
+}
+// El concepto de la factura COES suele traer el mes y año en texto explicito
+// (ej. "INFORME COES/D/DO/SME-INF-090-2026 - ABRIL 2026"). Permite resolver el
+// periodo exacto de una factura sin depender de que ya este sincronizado/indexado
+// localmente, para poder ir a buscarlo a COES on-demand cuando llega una factura
+// de un mes distinto al ultimo sincronizado (ej. facturas tardias o de migracion).
+function extractPeriodFromText(text) {
+    if (!text)
+        return undefined;
+    const normalized = (0, classifier_1.normalizeText)(text);
+    const monthsPattern = MONTH_NAMES_ES.map((name) => name.toLowerCase()).join("|");
+    const match = normalized.match(new RegExp(`\\b(${monthsPattern})\\s+(\\d{4})\\b`));
+    if (!match)
+        return undefined;
+    const month = MONTH_NAMES_ES.findIndex((name) => name.toLowerCase() === match[1]) + 1;
+    const year = Number(match[2]);
+    if (!month || !Number.isFinite(year))
+        return undefined;
+    return { year, month };
 }
 function monthFolderName(month) {
     const padded = String(month).padStart(2, "0");

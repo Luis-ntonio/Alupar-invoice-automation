@@ -18,6 +18,7 @@
         <nav class="menu">
           <a href="#dashboard">Dashboard</a>
           <a href="coes.html">COES VTEA/VTP</a>
+          <a href="fallidas.html">Facturas fallidas</a>
         </nav>
       </div>
     </header>
@@ -117,6 +118,27 @@
         </div>
       </section>
     </main>
+
+    <div id="exportSelectionModal" class="email-modal" hidden>
+      <div class="email-modal-backdrop" data-close-export-modal></div>
+      <section class="email-modal-card export-modal-card" role="dialog" aria-modal="true" aria-labelledby="exportSelectionTitle">
+        <div class="email-modal-header">
+          <div>
+            <p class="email-modal-kicker">Generar ZIP</p>
+            <h2 id="exportSelectionTitle">Elige los archivos a incluir</h2>
+            <p class="muted email-modal-meta">Por cada factura selecciona que archivos exportar. Todos vienen marcados por defecto.</p>
+          </div>
+          <button id="closeExportModalBtn" class="btn-secondary btn-secondary-bright" type="button">Cerrar</button>
+        </div>
+        <div class="email-modal-body export-modal-body">
+          <div id="exportSelectionList" class="export-selection-list"></div>
+          <div class="export-modal-actions">
+            <button id="exportSelectionConfirmBtn" class="btn-primary" type="button">Generar ZIP</button>
+            <button id="exportSelectionCancelBtn" class="btn-secondary" type="button">Cancelar</button>
+          </div>
+        </div>
+      </section>
+    </div>
 
     <div id="emailPreviewModal" class="email-modal" hidden>
       <div class="email-modal-backdrop" data-close-email-modal></div>

@@ -17,6 +17,7 @@
         <nav class="menu">
           <a href="index.html">Dashboard</a>
           <a href="coes.html">COES VTEA/VTP</a>
+          <a href="fallidas.html">Facturas fallidas</a>
         </nav>
       </div>
     </header>
@@ -27,7 +28,7 @@
           <div class="toolbar-left">
             <div class="toolbar-copy">
               <span class="toolbar-title">Verificacion manual de cruce</span>
-              <span class="toolbar-subtitle">Selecciona dataset/periodo, ingresa el RUC del proveedor y el monto de la factura para validarlo contra la matriz.</span>
+              <span class="toolbar-subtitle">Selecciona dataset/periodo e ingresa el RUC del proveedor para ver su monto en la matriz.</span>
             </div>
           </div>
         </div>
@@ -48,11 +49,6 @@
             <span>RUC proveedor</span>
             <input id="verifyRuc" type="text" placeholder="20XXXXXXXXX" />
           </label>
-          <label class="coes-field">
-            <span>Monto factura</span>
-            <input id="verifyMonto" type="number" step="0.01" placeholder="0.00" />
-          </label>
-          <button id="verifyBtn" class="btn-primary" type="button">Verificar</button>
         </div>
 
         <p id="verifyResult" class="status-line"></p>
@@ -78,12 +74,28 @@
           <div class="toolbar-left">
             <div class="toolbar-copy">
               <span class="toolbar-title">Montos por empresa</span>
-              <span class="toolbar-subtitle">Comparativo de montos de las contrapartes de Alupar en el periodo seleccionado.</span>
+              <span class="toolbar-subtitle">Comparativo de montos de las contrapartes de Alupar en el periodo seleccionado. Click en una barra o tarjeta para ver su historico.</span>
             </div>
           </div>
         </div>
         <div class="chart-wrap" style="height: 360px">
           <canvas id="aluparChart"></canvas>
+        </div>
+      </section>
+
+      <section class="panel" id="historyPanel" hidden>
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-copy">
+              <span class="toolbar-title">Historico COES <span id="historyCompanyName"></span></span>
+              <span class="toolbar-subtitle">Monto de la contraparte con Alupar a lo largo de los periodos indexados (<span id="historyDatasetLabel"></span>).</span>
+            </div>
+          </div>
+          <button id="historyCloseBtn" class="btn-link" type="button">Cerrar ✕</button>
+        </div>
+        <p id="historyStatus" class="status-line"></p>
+        <div class="chart-wrap" style="height: 320px">
+          <canvas id="historyChart"></canvas>
         </div>
       </section>
     </main>

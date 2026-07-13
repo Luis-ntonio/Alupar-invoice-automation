@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"><ext:UBLExtensions><ext:UBLExtension><ext:ExtensionContent><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Id="IdSingEfact"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/><ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><ds:Reference URI=""><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><ds:DigestValue>hVnlLOBZtDLmZZRQWZrElKvuq5M=</ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue>h2421K6d3jomB8+BxEf8g7K2tV3BYLZ1HXPsoR/YIQjB5ZJwDM3TkT7J4vM1lXYmECbaZmcQIGJE&#13;
+mUEWsoUA+K7XK8bk97wci0b7AaYQCFji6BT+BsLCnQcm7P/Qf/IKhj/drgo2dBZkXecBzCE/lkKt&#13;
+0hy2gLiix/M9jY3FTalBywAkvYoxgjYHu3K2uJ6kkJe+ZR4HML6HM7YgCEVY53VshPYj8TAm1XVI&#13;
+JlxjE+rQodx/U+DxJVXj0fsUM3e8rRyMUbnuykVw+q+aQmMSJoboM8KK3rKWroGnOKVZvqVj5r3W&#13;
+8YVkELo2s1pmh48M4U8SZgx6HWlYiSWZmUKKDQ==</ds:SignatureValue><ds:KeyInfo><ds:X509Data><ds:X509Certificate>MIIF/zCCBOegAwIBAgITVXuntTUWr+ycc112dudpVO7r7jANBgkqhkiG9w0BAQsFADCBkjELMAkG&#13;
+A1UEBhMCQ0gxEDAOBgNVBAoTB1dJU2VLZXkxJjAkBgNVBAsTHUNvcHlyaWdodCAoYykgMjAxNiBX&#13;
+SVNlS2V5IFNBMRYwFAYDVQQLEw1JbnRlcm5hdGlvbmFsMTEwLwYDVQQDEyhXSVNlS2V5IENlcnRp&#13;
+ZnlJRCBBZHZhbmNlZCBTZXJ2aWNlcyBDQSA0MB4XDTI1MDkxNjE1MjcyNFoXDTI4MDkxNTE1Mjcy&#13;
+M1owggE7MQswCQYDVQQGEwJQRTENMAsGA1UEBwwETGltYTEVMBMGA1UECgwMRUZBQ1QgUy5BLkMu&#13;
+MSswKQYDVQQLDCJWYWxpZGF0ZWQgYnkgUGVydSBTZWN1cmUgRSBOZXQgU0FDMRgwFgYDVQQLDA9S&#13;
+VUMgMjA1NTEwOTMwMzUxHDAaBgNVBAsME1JFUFJFU0VOVEFOVEUgTEVHQUwxNTAzBgNVBAsMLE1J&#13;
+UklBTSBNQVJJQkVMIE9MQVlBIFJBTcONUkVaIC0gRE5JIDA5MTM0MTcyMTMwMQYDVQQLDCpDZXJ0&#13;
+aWZpY2FkbyBjb3Jwb3JhdGl2byBkZSByZXByZXNlbnRhY2nDs24xFTATBgNVBAMMDEVGQUNUIFMu&#13;
+QS5DLjEeMBwGCSqGSIb3DQEJARYPbW9sYXlhQGVmYWN0LnBlMIIBIjANBgkqhkiG9w0BAQEFAAOC&#13;
+AQ8AMIIBCgKCAQEAr4Em7LXJ8OySzxb9Mmtgor883wxGsGO7tt1BKYZuZ4qwchNbd7C2X9Y58+g6&#13;
+lMciRG1G7G2edazlGBGkNp9vfsbeMiObzDWLsz2ipplZhhq4xl5oNsYlWtl16qO7MdtW6rQaXvf8&#13;
+2UHueHAzbwwqcWdT8LkmkRKEWQWPayD/BSPbIiMHHk1UMOde1/S86G1ht7rxv9py+KcdTsISpqg0&#13;
+r8iAD4PET5shCls+zDBhono3osGaFEqsOyKLsypfC+w9dhACiw4UuuySNradCKGkL6i/CsPpgrg1&#13;
+jewr8snW5OBC1+bTFUoEBQNzS4K/FgacxQRdxPprNI9yic7IarnL4QIDAQABo4IBoDCCAZwwDAYD&#13;
+VR0TAQH/BAIwADAfBgNVHSMEGDAWgBT05JtX0q7CnohNALorr2XJY6mHmzBsBggrBgEFBQcBAQRg&#13;
+MF4wNwYIKwYBBQUHMAKGK2h0dHA6Ly9wdWJsaWMud2lzZWtleS5jb20vY3J0L3djaWRhc2NhNC5j&#13;
+cnQwIwYIKwYBBQUHMAGGF2h0dHA6Ly9vY3NwLndpc2VrZXkuY29tMBoGA1UdEQQTMBGBD21vbGF5&#13;
+YUBlZmFjdC5wZTBHBgNVHSAEQDA+MDwGCGCFdAUOBwQDMDAwLgYIKwYBBQUHAgEWImh0dHA6Ly93&#13;
+d3cud2lzZWtleS5jb20vcmVwb3NpdG9yeS8wPAYDVR0fBDUwMzAxoC+gLYYraHR0cDovL3B1Ymxp&#13;
+Yy53aXNla2V5LmNvbS9jcmwvd2NpZGFzY2E0LmNybDAdBgNVHQ4EFgQU7x7m/mPLQqUnoFYpPyo/&#13;
+St/tvXIwKwYDVR0lBCQwIgYIKwYBBQUHAwIGCisGAQQBgjcUAgIGCisGAQQBgjcKAwwwDgYDVR0P&#13;
+AQH/BAQDAgbAMA0GCSqGSIb3DQEBCwUAA4IBAQCqt2edLcj02fyouvq72BVYcKYJWopO2sGmHDBN&#13;
+J0KdU/TuH5rmLy0cnjD+Yb8nuzkAG6ftofb5fYOgyHsXGrCgWgNKJJiQ/wJ7iKVh5wc8sg+37+VB&#13;
+0DUZQPA/OxXgGsipp2lhlHueeeDwjp0/p4OTZHWqiE/WmmXMe7aRgFTTs1cbGRV56Gg+Sp3hP+lr&#13;
+pU9ysF9/cstvu2vJ87YHMSRdEYvzkNqRAjmtFNsFcGRuCJEIZ9xl8stSiXquiQjCETMDgq31ZMdc&#13;
+19G4+az2S5yWJCNaRnSMzpEqY3Hgpqh+zHsac5RNW+MkRkWDZvYMC8Dy5IeoBvTAodFPvSLjyxfo</ds:X509Certificate><ds:X509IssuerSerial><ds:X509IssuerName>1.2.840.113549.1.9.1=#160f6d6f6c6179614065666163742e7065,CN=EFACT S.A.C.,OU=Certificado corporativo de representación,OU=MIRIAM MARIBEL OLAYA RAMÍREZ - DNI 09134172,OU=REPRESENTANTE LEGAL,OU=RUC 20551093035,OU=Validated by Peru Secure E Net SAC,O=EFACT S.A.C.,L=Lima,C=PE</ds:X509IssuerName><ds:X509SerialNumber>1906335221065904395830907911209275094452857838</ds:X509SerialNumber></ds:X509IssuerSerial></ds:X509Data></ds:KeyInfo></ds:Signature></ext:ExtensionContent></ext:UBLExtension></ext:UBLExtensions>
+   <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+   <cbc:CustomizationID>2.0</cbc:CustomizationID>
+   <cbc:ID>F111-0004145</cbc:ID>
+   <cbc:IssueDate>2026-07-09</cbc:IssueDate>
+   <cbc:DueDate>2026-07-24</cbc:DueDate>
+   <cbc:InvoiceTypeCode listID="1001" listSchemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51" name="Tipo de Operacion">01</cbc:InvoiceTypeCode>
+   <cbc:Note languageLocaleID="1000">SIETE MIL OCHENTA Y 00/100 DOLARES AMERICANOS</cbc:Note>
+   <cbc:Note languageLocaleID="2006">Operación sujeta a detracción</cbc:Note>
+   <cbc:Note languageID="D">102173</cbc:Note>
+   <cbc:Note languageID="I">ONEROSO</cbc:Note>
+   <cbc:Note languageID="K">1400000672</cbc:Note>
+   <cbc:Note languageID="L">Factura a 15 días</cbc:Note>
+   <cbc:Note languageID="R">0900266673</cbc:Note>
+   <cbc:Note languageID="S">U002-CONDORCOCHA</cbc:Note>
+   <cbc:Note languageID="U">contacto@unacem.pe</cbc:Note>
+   <cbc:Note languageID="V">TELEFONO- +512170200 FAX- +512170200</cbc:Note>
+   <cbc:Note languageID="W">WWW.UNACEM.PE</cbc:Note>
+   <cbc:Note languageID="X">Particulares</cbc:Note>
+   <cbc:Note languageID="BC">LA VIRGEN S.A.C.</cbc:Note>
+   <cbc:Note languageID="BF">OPER. SUJETA SPOT - DETRACCION 12.00 % – BANCO DE LA NACION CC N° 00046332385 - US$ 849.6 TC 3.41200 S/. 2899.00</cbc:Note>
+   <cbc:Note languageID="BJ">Puesto en Fabrica</cbc:Note>
+   <cbc:Note languageID="CG">001</cbc:Note>
+   <cbc:DocumentCurrencyCode listAgencyName="United Nations Economic Commission for Europe" listID="ISO 4217 Alpha" listName="Currency">USD</cbc:DocumentCurrencyCode>
+   <cbc:LineCountNumeric>1</cbc:LineCountNumeric>
+   <cac:OrderReference>
+      <cbc:ID>CONEXIONOPERACION</cbc:ID>
+   </cac:OrderReference>
+   <cac:Signature>
+      <cbc:ID>IDSignKG</cbc:ID>
+      <cac:SignatoryParty>
+         <cac:PartyIdentification>
+            <cbc:ID>20608552171</cbc:ID>
+         </cac:PartyIdentification>
+         <cac:PartyName>
+            <cbc:Name>UNACEM PERU S.A.</cbc:Name>
+         </cac:PartyName>
+      </cac:SignatoryParty>
+      <cac:DigitalSignatureAttachment>
+         <cac:ExternalReference>
+            <cbc:URI>#SignST</cbc:URI>
+         </cac:ExternalReference>
+      </cac:DigitalSignatureAttachment>
+   </cac:Signature>
+   <cac:AccountingSupplierParty>
+      <cac:Party>
+         <cac:PartyIdentification>
+            <cbc:ID schemeAgencyName="PE:SUNAT" schemeID="6" schemeName="Documento de Identidad" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20608552171</cbc:ID>
+         </cac:PartyIdentification>
+         <cac:PartyName>
+            <cbc:Name>UNACEM PERU SA</cbc:Name>
+         </cac:PartyName>
+         <cac:PartyLegalEntity>
+            <cbc:RegistrationName>UNACEM PERU S.A.</cbc:RegistrationName>
+            <cac:RegistrationAddress>
+               <cbc:ID schemeAgencyName="PE:INEI" schemeName="Ubigeos">150143</cbc:ID>
+               <cbc:AddressTypeCode listAgencyName="PE:SUNAT" listName="Establecimientos anexos">0023</cbc:AddressTypeCode>
+               <cbc:CitySubdivisionName>URB. JOSE GALVEZ</cbc:CitySubdivisionName>
+               <cbc:CityName>LIMA</cbc:CityName>
+               <cbc:CountrySubentity>LIMA</cbc:CountrySubentity>
+               <cbc:District>VILLA MARIA DEL TRIUNFO</cbc:District>
+               <cac:AddressLine>
+                  <cbc:Line>Av. Atocongo Nro. 2440</cbc:Line>
+               </cac:AddressLine>
+               <cac:Country>
+                  <cbc:IdentificationCode listAgencyName="United Nations Economic Commission for Europe" listID="ISO 3166-1" listName="Country">PE</cbc:IdentificationCode>
+               </cac:Country>
+            </cac:RegistrationAddress>
+         </cac:PartyLegalEntity>
+      </cac:Party>
+   </cac:AccountingSupplierParty>
+   <cac:AccountingCustomerParty>
+      <cac:Party>
+         <cac:PartyIdentification>
+            <cbc:ID schemeAgencyName="PE:SUNAT" schemeID="6" schemeName="Documento de Identidad" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06">20492925030</cbc:ID>
+         </cac:PartyIdentification>
+         <cac:PartyName>
+            <cbc:Name/>
+         </cac:PartyName>
+         <cac:PartyLegalEntity>
+            <cbc:RegistrationName>LA VIRGEN S.A.C.</cbc:RegistrationName>
+            <cac:RegistrationAddress>
+               <cbc:ID schemeAgencyName="PE:INEI" schemeName="Ubigeos"/>
+               <cbc:CitySubdivisionName/>
+               <cbc:CityName>LIMA</cbc:CityName>
+               <cbc:CountrySubentity>Lima</cbc:CountrySubentity>
+               <cbc:District>MIRAFLORES</cbc:District>
+               <cac:AddressLine>
+                  <cbc:Line>AV. JOSE PARDO NRO. 434 INT. 902 (EDIFICIO LIT ONE)</cbc:Line>
+               </cac:AddressLine>
+               <cac:Country>
+                  <cbc:IdentificationCode listAgencyName="United Nations Economic Commission for Europe" listID="ISO 3166-1" listName="Country">PE</cbc:IdentificationCode>
+               </cac:Country>
+            </cac:RegistrationAddress>
+         </cac:PartyLegalEntity>
+         <cac:Contact>
+            <cbc:ElectronicMail>RECEPCIONDEFACTURASELECTRONICAS@LAVIRGEN.COM.PE,ADRIAN.MALDONADO@UNACEM.PE,FACTURACIONLV@LAVIRGEN.COM.PE</cbc:ElectronicMail>
+         </cac:Contact>
+      </cac:Party>
+   </cac:AccountingCustomerParty>
+   <cac:PaymentMeans>
+      <cbc:ID>Detraccion</cbc:ID>
+      <cbc:PaymentMeansCode listID="UN/ECE 4461">001</cbc:PaymentMeansCode>
+      <cac:PayeeFinancialAccount>
+         <cbc:ID>00046332385</cbc:ID>
+      </cac:PayeeFinancialAccount>
+   </cac:PaymentMeans>
+   <cac:PaymentTerms>
+      <cbc:ID>Detraccion</cbc:ID>
+      <cbc:PaymentMeansID>037</cbc:PaymentMeansID>
+      <cbc:Note>7080.00</cbc:Note>
+      <cbc:PaymentPercent>12.00</cbc:PaymentPercent>
+      <cbc:Amount currencyID="PEN">2899.00</cbc:Amount>
+   </cac:PaymentTerms>
+   <cac:PaymentTerms>
+      <cbc:ID>FormaPago</cbc:ID>
+      <cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>
+      <cbc:Amount currencyID="USD">6230.4</cbc:Amount>
+   </cac:PaymentTerms>
+   <cac:PaymentTerms>
+      <cbc:ID>FormaPago</cbc:ID>
+      <cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>
+      <cbc:Amount currencyID="USD">6230.4</cbc:Amount>
+      <cbc:PaymentDueDate>2026-07-24</cbc:PaymentDueDate>
+   </cac:PaymentTerms>
+   <cac:TaxTotal>
+      <cbc:TaxAmount currencyID="USD">1080.00</cbc:TaxAmount>
+      <cac:TaxSubtotal>
+         <cbc:TaxableAmount currencyID="USD">6000.00</cbc:TaxableAmount>
+         <cbc:TaxAmount currencyID="USD">1080.00</cbc:TaxAmount>
+         <cac:TaxCategory>
+            <cac:TaxScheme>
+               <cbc:ID schemeAgencyID="6" schemeID="UN/ECE 5153">1000</cbc:ID>
+               <cbc:Name>IGV</cbc:Name>
+               <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+            </cac:TaxScheme>
+         </cac:TaxCategory>
+      </cac:TaxSubtotal>
+   </cac:TaxTotal>
+   <cac:LegalMonetaryTotal>
+      <cbc:LineExtensionAmount currencyID="USD">6000.00</cbc:LineExtensionAmount>
+      <cbc:TaxInclusiveAmount currencyID="USD">7080.00</cbc:TaxInclusiveAmount>
+      <cbc:PayableAmount currencyID="USD">7080.00</cbc:PayableAmount>
+   </cac:LegalMonetaryTotal>
+   <cac:InvoiceLine>
+      <cbc:ID>1</cbc:ID>
+      <cbc:Note>NIU</cbc:Note>
+      <cbc:InvoicedQuantity unitCode="NIU" unitCodeListAgencyName="United Nations Economic Commission for Europe" unitCodeListID="UN/ECE rec 20">1.000</cbc:InvoicedQuantity>
+      <cbc:LineExtensionAmount currencyID="USD">6000.00</cbc:LineExtensionAmount>
+      <cac:BillingReference>
+         <cac:BillingReferenceLine>
+            <cbc:ID schemeID="AL">7080.00</cbc:ID>
+         </cac:BillingReferenceLine>
+         <cac:BillingReferenceLine>
+            <cbc:ID schemeID="AY">UND</cbc:ID>
+         </cac:BillingReferenceLine>
+      </cac:BillingReference>
+      <cac:PricingReference>
+         <cac:AlternativeConditionPrice>
+            <cbc:PriceAmount currencyID="USD">7080.000000</cbc:PriceAmount>
+            <cbc:PriceTypeCode listAgencyName="PE:SUNAT" listName="Tipo de Precio" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode>
+         </cac:AlternativeConditionPrice>
+      </cac:PricingReference>
+      <cac:TaxTotal>
+         <cbc:TaxAmount currencyID="USD">1080.00</cbc:TaxAmount>
+         <cac:TaxSubtotal>
+            <cbc:TaxableAmount currencyID="USD">6000.00</cbc:TaxableAmount>
+            <cbc:TaxAmount currencyID="USD">1080.00</cbc:TaxAmount>
+            <cac:TaxCategory>
+               <cbc:Percent>18.0</cbc:Percent>
+               <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionReasonCode>
+               <cac:TaxScheme>
+                  <cbc:ID schemeAgencyName="PE:SUNAT" schemeName="Codigo de tributos" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID>
+                  <cbc:Name>IGV</cbc:Name>
+                  <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+               </cac:TaxScheme>
+            </cac:TaxCategory>
+         </cac:TaxSubtotal>
+      </cac:TaxTotal>
+      <cac:Item>
+         <cbc:Description>POR CONEXIÓN OPERACIÓN Y MANTENIMIENTO EN SUB ESTACIÓN CARIPA SEGÚN CONVENIO DE CONEXIÓN LV-JURC-033-2023 CORRESPONDIENTE AL MES DE JUNIO 2026.</cbc:Description>
+         <cac:CommodityClassification>
+            <cbc:ItemClassificationCode listAgencyName="GS1 US" listID="UNSPSC" listName="Item Classification">93151507</cbc:ItemClassificationCode>
+         </cac:CommodityClassification>
+      </cac:Item>
+      <cac:Price>
+         <cbc:PriceAmount currencyID="USD">6000.000000</cbc:PriceAmount>
+      </cac:Price>
+   </cac:InvoiceLine>
+</Invoice>

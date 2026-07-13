@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { normalizeText } from "../utils/classifier";
 import { BlobStorageService } from "./blobStorage";
 
 const COES_INDEX_PATH = "coes/coes-index.json";
@@ -142,6 +143,23 @@ function monthNameEs(month: number): string {
 	return MONTH_NAMES_ES[month - 1] ?? "";
 }
 
+// El concepto de la factura COES suele traer el mes y año en texto explicito
+// (ej. "INFORME COES/D/DO/SME-INF-090-2026 - ABRIL 2026"). Permite resolver el
+// periodo exacto de una factura sin depender de que ya este sincronizado/indexado
+// localmente, para poder ir a buscarlo a COES on-demand cuando llega una factura
+// de un mes distinto al ultimo sincronizado (ej. facturas tardias o de migracion).
+export function extractPeriodFromText(text: string | undefined | null): CoesSyncPeriod | undefined {
+	if (!text) return undefined;
+	const normalized = normalizeText(text);
+	const monthsPattern = MONTH_NAMES_ES.map((name) => name.toLowerCase()).join("|");
+	const match = normalized.match(new RegExp(`\\b(${monthsPattern})\\s+(\\d{4})\\b`));
+	if (!match) return undefined;
+	const month = MONTH_NAMES_ES.findIndex((name) => name.toLowerCase() === match[1]) + 1;
+	const year = Number(match[2]);
+	if (!month || !Number.isFinite(year)) return undefined;
+	return { year, month };
+}
+
 function monthFolderName(month: number): string {
 	const padded = String(month).padStart(2, "0");
 	return `${padded}_${monthNameEs(month)}`;
@@ -228,7 +246,7 @@ async function fetchCoesFile(remoteUrl: string): Promise<Buffer | null> {
 	return bytes;
 }
 
-async function syncCoesMonthlyDataset(
+export async function syncCoesMonthlyDataset(
 	dataset: CoesDataset,
 	period: CoesSyncPeriod,
 	blobStorage = new BlobStorageService()
@@ -306,7 +324,7 @@ function periodKey(period: CoesSyncPeriod): string {
 	return `${period.year}-${period.month}`;
 }
 
-function shiftPeriod(period: CoesSyncPeriod, delta: number): CoesSyncPeriod {
+export function shiftPeriod(period: CoesSyncPeriod, delta: number): CoesSyncPeriod {
 	return toPeriod(shiftMonths(new Date(Date.UTC(period.year, period.month - 1, 1)), delta));
 }
 
