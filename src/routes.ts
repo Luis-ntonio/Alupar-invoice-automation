@@ -153,6 +153,45 @@ function inferFilenameFromUrl(fileUrl: string): string {
   }
 }
 
+// Extrae el filename de un header Content-Disposition (soporta filename*= y filename=).
+// Los portales (ej. efacturacion.pe) mandan aqui un nombre limpio como
+// "20600217721-01-FF02-5353.pdf", mucho mejor que el original_filename de Workato.
+function parseContentDispositionFilename(cd: string | null): string | undefined {
+  if (!cd) return undefined;
+  const star = cd.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
+  if (star) {
+    try { return decodeURIComponent(star[1].replace(/["']/g, "").trim()); } catch { /* ignore */ }
+  }
+  const plain = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
+  if (plain) return plain[1].trim();
+  return undefined;
+}
+
+// Sanitiza un nombre de archivo para que sea seguro como ruta de Blob y como
+// segmento de URL. Critico: los separadores de ruta (/ y \) rompen la ruta de
+// descarga /documents/:id/files/:filename (el request cae al catch-all y se
+// devuelve el index.html del dashboard en vez del archivo). Tambien elimina los
+// caracteres ilegales en Windows/Blob. Ademas fuerza una extension coherente con
+// el tipo real detectado por magic bytes.
+function sanitizeStoredFileName(name: string, fileType: string): string {
+  let clean = (name || "file")
+    .replace(/[/\\]+/g, "_")          // separadores de ruta
+    .replace(/[:*?"<>|]/g, "_")       // ilegales en Windows
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f]/g, "") // caracteres de control
+    .replace(/\s+/g, " ")
+    .replace(/_+/g, "_")
+    .trim();
+  if (!clean) clean = "file";
+  const ext = fileType === "pdf" ? ".pdf" : fileType === "xml" ? ".xml" : fileType === "zip" ? ".zip" : "";
+  if (ext && !clean.toLowerCase().endsWith(ext)) {
+    // Quitar cualquier "seudo-extension" basura al final (ej. ".application_pdf;charset=...").
+    clean = clean.replace(/\.[^.\s]{0,40}$/i, "");
+    clean = (clean.trim() || "file") + ext;
+  }
+  return clean;
+}
+
 // Detecta respuestas que NO son el archivo esperado sino una pagina HTML: el
 // login/redireccion de un portal, o el propio SPA del dashboard servido por el
 // fallback catch-all (app.get("*") -> index.html) cuando la URL apunta a este
@@ -193,16 +232,23 @@ async function downloadWorkatoRemoteFile(ref: WorkatoRemoteFileRef): Promise<Exp
     }
     const responseContentType = response.headers.get("content-type") ?? "";
     const mimeType = ref.mimetype || responseContentType.split(";")[0] || "application/octet-stream";
-    const originalname = ref.originalname || inferFilenameFromUrl(response.url || ref.url);
-    const contentError = validateRemoteFileContent(buffer, responseContentType, originalname);
+    // Preferencia de nombre: Content-Disposition del portal (limpio, ej.
+    // "20600217721-01-FF02-5353.pdf") > original_filename de Workato (que puede
+    // venir basura, ej. "...TicketID:[...].application/pdf;charset=ISO-8859-1") >
+    // inferido de la URL. Luego se sanitiza para que sea seguro como ruta/URL.
+    const dispositionName = parseContentDispositionFilename(response.headers.get("content-disposition"));
+    const rawName = dispositionName || ref.originalname || inferFilenameFromUrl(response.url || ref.url);
+    const contentError = validateRemoteFileContent(buffer, responseContentType, rawName);
     if (contentError) {
       const snippet = buffer.subarray(0, 200).toString("latin1").replace(/\s+/g, " ").trim();
       console.warn(
-        `[downloadWorkatoRemoteFile] Descarga rechazada (${originalname}): ${contentError}. ` +
+        `[downloadWorkatoRemoteFile] Descarga rechazada (${rawName}): ${contentError}. ` +
         `url=${ref.url} urlFinal=${response.url} status=${response.status} content-type="${responseContentType}" inicio="${snippet}"`
       );
       return null;
     }
+    const fileType = detectFileType(rawName, mimeType, buffer);
+    const originalname = sanitizeStoredFileName(rawName, fileType);
     console.log(`[downloadWorkatoRemoteFile] OK ${originalname} (${mimeType}, ${buffer.length}B)`);
     return makeWorkatoFile(originalname, mimeType, buffer);
   } catch (err) {
@@ -744,8 +790,13 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
     const fileType = detectFileType(file.originalname, file.mimetype, file.buffer);
     if (fileType === "unknown") { rejected++; continue; }
     const hash = createSha256(file.buffer);
-    const sourcePath = await blobStorage.saveIncoming(file.buffer, requestId, file.originalname);
-    attachedFiles.push({ fileName: file.originalname, fileType, mimeType: file.mimetype, sourcePath, hash });
+    // Sanitizar el nombre antes de guardarlo: un "/" u otro caracter raro en el
+    // nombre rompe la ruta de descarga /documents/:id/files/:filename (cae al
+    // catch-all y devuelve el HTML del dashboard -> "PDF en blanco"). Se aplica a
+    // TODOS los origenes (adjunto hex, descarga remota, ZIP) como red de seguridad.
+    const safeName = sanitizeStoredFileName(file.originalname, fileType);
+    const sourcePath = await blobStorage.saveIncoming(file.buffer, requestId, safeName);
+    attachedFiles.push({ fileName: safeName, fileType, mimeType: file.mimetype, sourcePath, hash });
   }
 
   if (!attachedFiles.length) {
@@ -1165,8 +1216,11 @@ router.get("/documents/:id/files/:filename", async (req, res) => {
     if (!item) return res.status(404).json({ error: "Registro no encontrado." });
     const file = item.files.find(f => f.fileName === req.params.filename);
     if (!file) return res.status(404).json({ error: "Archivo no encontrado." });
-    const disposition = file.mimeType === "application/pdf" ? "inline" : "attachment";
-    res.setHeader("Content-Type", file.mimeType || "application/octet-stream");
+    // PDF inline (preview en el navegador); el resto se descarga. Se usa includes
+    // para tolerar mimeType con sufijo, ej. "application/pdf;charset=ISO-8859-1".
+    const isPdf = (file.mimeType || "").toLowerCase().includes("pdf") || file.fileName.toLowerCase().endsWith(".pdf");
+    const disposition = isPdf ? "inline" : "attachment";
+    res.setHeader("Content-Type", isPdf ? "application/pdf" : (file.mimeType || "application/octet-stream"));
     res.setHeader("Content-Disposition", `${disposition}; filename="${encodeURIComponent(file.fileName)}"`);
     const stream = await blobStorage.openReadStream(file.sourcePath);
     stream.pipe(res);
