@@ -8,10 +8,14 @@ Incluye:
 - Clasificacion (`factura`, `comprobante`, `nota`).
 - Inferencia de concepto para agrupacion.
 - Descarga automatica diaria de los Excels COES mensuales de Liquidaciones VTEA y Liquidaciones VTP.
-- Persistencia en modo local o Azure Cosmos DB.
-- Almacenamiento en modo local o Azure Blob Storage.
+- Persistencia en modo local o Firestore.
+- Almacenamiento en modo local o Cloud Storage.
+- Login por email/contrasena con Firebase Authentication.
 - Generacion de ZIP por concepto (`/api/exports/:concept`).
 - Dashboard web simple en `public/`.
+
+La implementacion anterior sobre Azure (Blob, Cosmos DB, Entra ID/MSAL) quedo en
+la rama `legacy-azure`.
 
 ## 1) Ejecutar en local
 

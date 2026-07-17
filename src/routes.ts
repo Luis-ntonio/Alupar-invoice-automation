@@ -22,8 +22,8 @@ import { broadcastDocumentDeleted, broadcastDocumentUpdated, broadcastNewDocumen
 // fieldSize de 100MB: Workato envía archivos como hex en campos de texto
 // (1 byte → 2 chars hex), por lo que un PDF ocupa ~2x como texto. Con 100MB
 // caben PDFs de ~50MB antes de que multer trunque el campo silenciosamente.
-// Trade-off: memoryStorage retiene todo el payload en RAM del Container App,
-// asi que subir mucho mas este limite presiona la memoria de la instancia.
+// Trade-off: memoryStorage retiene todo el payload en RAM de la instancia de
+// Cloud Run, asi que subir mucho mas este limite presiona su memoria.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fieldSize: 100 * 1024 * 1024 } });
 const router = express.Router();
 const repository = createRepository();
