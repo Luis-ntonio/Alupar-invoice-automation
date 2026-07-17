@@ -5,7 +5,11 @@ import path from "node:path";
 import { config } from "./config";
 import router from "./routes";
 import { startCoesScheduler } from "./services/coesScheduler";
+import { assertAuthConfigured } from "./services/firebaseAuth";
 import { attachWebSocketServer } from "./services/realtime";
+
+// Antes de escuchar: en produccion, sin auth configurada no se levanta.
+assertAuthConfigured();
 
 const app = express();
 

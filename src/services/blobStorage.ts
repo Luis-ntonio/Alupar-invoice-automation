@@ -1,4 +1,4 @@
-import { BlobServiceClient } from "@azure/storage-blob";
+import { Storage } from "@google-cloud/storage";
 import { createReadStream, createWriteStream, promises as fs } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -6,24 +6,28 @@ import { pipeline } from "node:stream/promises";
 import { config } from "../config";
 
 export class BlobStorageService {
-  private blobServiceClient: BlobServiceClient | null = null;
+  private storage: Storage | null = null;
 
   constructor() {
-    if (config.storageMode === "azure") {
-      if (!config.azureStorageConnectionString) {
-        throw new Error("AZURE_STORAGE_CONNECTION_STRING no esta configurado.");
-      }
-      this.blobServiceClient = BlobServiceClient.fromConnectionString(config.azureStorageConnectionString);
+    if (config.storageMode === "gcp") {
+      // ADC: en Cloud Run usa la service account del servicio.
+      this.storage = new Storage();
     }
   }
 
-  private async getContainerClient(containerName: string) {
-    if (!this.blobServiceClient) {
-      throw new Error("Cliente Azure Blob no inicializado.");
+  // En GCS los exports viven en su bucket; el resto (raw/, coes/) en el bucket raw.
+  private gcsFile(storagePath: string) {
+    if (!this.storage) {
+      throw new Error("Cliente GCS no inicializado.");
     }
-    const container = this.blobServiceClient.getContainerClient(containerName);
-    await container.createIfNotExists();
-    return container;
+    const isExport = storagePath.startsWith("exports/");
+    const bucketName = isExport ? config.exportsBucket : config.rawBucket;
+    if (!bucketName) {
+      throw new Error(
+        isExport ? "GCS_BUCKET_EXPORTS no esta configurado." : "GCS_BUCKET_RAW no esta configurado."
+      );
+    }
+    return this.storage.bucket(bucketName).file(storagePath);
   }
 
   async saveIncoming(buffer: Buffer, requestId: string, fileName: string): Promise<string> {
@@ -32,10 +36,8 @@ export class BlobStorageService {
   }
 
   async saveAtPath(buffer: Buffer, storagePath: string): Promise<string> {
-    if (config.storageMode === "azure") {
-      const container = await this.getContainerClient(config.azureStorageContainerRaw);
-      const blockBlob = container.getBlockBlobClient(storagePath);
-      await blockBlob.uploadData(buffer);
+    if (config.storageMode === "gcp") {
+      await this.gcsFile(storagePath).save(buffer);
       return storagePath;
     }
 
@@ -46,10 +48,9 @@ export class BlobStorageService {
   }
 
   async exists(storagePath: string): Promise<boolean> {
-    if (config.storageMode === "azure") {
-      const container = await this.getContainerClient(config.azureStorageContainerRaw);
-      const blockBlob = container.getBlockBlobClient(storagePath);
-      return blockBlob.exists();
+    if (config.storageMode === "gcp") {
+      const [exists] = await this.gcsFile(storagePath).exists();
+      return exists;
     }
 
     const localTarget = path.join(config.localStorageDir, storagePath);
@@ -77,24 +78,16 @@ export class BlobStorageService {
   }
 
   async openReadStream(storagePath: string): Promise<Readable> {
-    if (config.storageMode === "azure") {
-      const container = await this.getContainerClient(config.azureStorageContainerRaw);
-      const blob = container.getBlobClient(storagePath);
-      const download = await blob.download();
-      if (!download.readableStreamBody) {
-        throw new Error(`No se pudo abrir stream para blob ${storagePath}.`);
-      }
-      return download.readableStreamBody as Readable;
+    if (config.storageMode === "gcp") {
+      return this.gcsFile(storagePath).createReadStream();
     }
 
     return createReadStream(path.join(config.localStorageDir, storagePath));
   }
 
   async delete(storagePath: string): Promise<void> {
-    if (config.storageMode === "azure") {
-      const container = await this.getContainerClient(config.azureStorageContainerRaw);
-      const blockBlob = container.getBlockBlobClient(storagePath);
-      await blockBlob.deleteIfExists();
+    if (config.storageMode === "gcp") {
+      await this.gcsFile(storagePath).delete({ ignoreNotFound: true });
       return;
     }
 
@@ -105,10 +98,8 @@ export class BlobStorageService {
   async saveExport(localZipPath: string, requestId: string, concept: string): Promise<string> {
     const exportPath = `exports/${requestId}/${sanitizeFileName(concept)}.zip`;
 
-    if (config.storageMode === "azure") {
-      const container = await this.getContainerClient(config.azureStorageContainerExports);
-      const blockBlob = container.getBlockBlobClient(exportPath);
-      await blockBlob.uploadFile(localZipPath);
+    if (config.storageMode === "gcp") {
+      await pipeline(createReadStream(localZipPath), this.gcsFile(exportPath).createWriteStream());
       return exportPath;
     }
 

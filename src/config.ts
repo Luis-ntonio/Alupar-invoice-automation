@@ -3,8 +3,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-export type StorageMode = "azure" | "local";
-export type DatabaseMode = "cosmos" | "local";
+export type StorageMode = "gcp" | "local";
+export type DatabaseMode = "firestore" | "local";
 
 function readEnum<T extends string>(
   value: string | undefined,
@@ -23,18 +23,14 @@ function readEnum<T extends string>(
 export const config = {
   port: Number(process.env.PORT ?? 8080),
   nodeEnv: process.env.NODE_ENV ?? "development",
-  storageMode: readEnum<StorageMode>(process.env.STORAGE_MODE, ["azure", "local"], "local"),
-  dbMode: readEnum<DatabaseMode>(process.env.DB_MODE, ["cosmos", "local"], "local"),
+  storageMode: readEnum<StorageMode>(process.env.STORAGE_MODE, ["gcp", "local"], "local"),
+  dbMode: readEnum<DatabaseMode>(process.env.DB_MODE, ["firestore", "local"], "local"),
   gcpProject: process.env.GOOGLE_CLOUD_PROJECT,
   gcpLocation: process.env.GOOGLE_CLOUD_LOCATION ?? "us-central1",
   documentAiLocation: process.env.DOCUMENT_AI_LOCATION ?? process.env.GOOGLE_CLOUD_LOCATION ?? "us",
-  azureStorageConnectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
-  azureStorageContainerRaw: process.env.AZURE_STORAGE_CONTAINER_RAW ?? "raw",
-  azureStorageContainerExports: process.env.AZURE_STORAGE_CONTAINER_EXPORTS ?? "exports",
-  azureCosmosEndpoint: process.env.AZURE_COSMOS_ENDPOINT,
-  azureCosmosKey: process.env.AZURE_COSMOS_KEY,
-  azureCosmosDatabase: process.env.AZURE_COSMOS_DATABASE ?? "facturasdb",
-  azureCosmosContainer: process.env.AZURE_COSMOS_CONTAINER ?? "documents",
+  rawBucket: process.env.GCS_BUCKET_RAW,
+  exportsBucket: process.env.GCS_BUCKET_EXPORTS,
+  firestoreCollection: process.env.FIRESTORE_COLLECTION ?? "documents",
   useDocumentAi: process.env.USE_DOCUMENT_AI === "true",
   documentAiProcessorId: process.env.DOCUMENT_AI_PROCESSOR_ID,
   documentAiProcessorVersion: process.env.DOCUMENT_AI_PROCESSOR_VERSION,
@@ -43,9 +39,13 @@ export const config = {
   coesValidationAutoSync: process.env.COES_VALIDATION_AUTO_SYNC !== "false",
   localDataDir: path.resolve(process.env.LOCAL_DATA_DIR ?? "./data"),
   localStorageDir: path.resolve(process.env.LOCAL_STORAGE_DIR ?? "./storage"),
-  azureAdTenantId: process.env.AZURE_AD_TENANT_ID,
-  azureAdClientId: process.env.AZURE_AD_CLIENT_ID,
-  azureAdFrontendClientId: process.env.AZURE_AD_FRONTEND_CLIENT_ID,
-  allowedDomains: process.env.ALLOWED_DOMAINS,
-  allowedEmails: process.env.ALLOWED_EMAILS,
+  // Firebase Authentication (login por email/contrasena gestionado por Firebase).
+  // El backend solo verifica el ID token; el front usa apiKey/authDomain (publicos).
+  firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT,
+  firebaseApiKey: process.env.FIREBASE_API_KEY,
+  firebaseAuthDomain:
+    process.env.FIREBASE_AUTH_DOMAIN ??
+    (process.env.FIREBASE_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT
+      ? `${process.env.FIREBASE_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT}.firebaseapp.com`
+      : undefined),
 };

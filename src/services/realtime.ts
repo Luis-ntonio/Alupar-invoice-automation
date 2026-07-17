@@ -1,7 +1,6 @@
 import type { Server as HttpServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
-import { config } from "../config";
-import { isEmailAllowed, verifyAccessToken } from "../middleware/auth";
+import { isAuthEnabled, verifyIdToken } from "./firebaseAuth";
 import type { EmailRecord } from "../types";
 
 const clients = new Set<WebSocket>();
@@ -9,10 +8,9 @@ let wss: WebSocketServer | null = null;
 
 // WS de notificacion en tiempo real para el dashboard (nuevo documento procesado
 // por /api/intake). Broadcast en memoria: solo funciona correctamente con una
-// sola replica del Container App (hoy fijo en minReplicas=maxReplicas=1 en
-// deploy-containerapps.ps1). Si en el futuro se sube maxReplicas, este enfoque
-// deja de avisar a clientes conectados a otra replica y habria que migrar a
-// Azure Web PubSub (fan-out compartido entre replicas).
+// sola instancia de Cloud Run. Si se sube --max-instances, este enfoque deja de
+// avisar a clientes conectados a otra instancia y habria que migrar el fan-out a
+// Pub/Sub (compartido entre instancias).
 export function attachWebSocketServer(server: HttpServer): void {
   wss = new WebSocketServer({ server, path: "/ws" });
 
@@ -20,18 +18,16 @@ export function attachWebSocketServer(server: HttpServer): void {
     const url = new URL(request.url ?? "", "http://localhost");
     const token = url.searchParams.get("token") ?? "";
 
-    if (config.azureAdTenantId && config.azureAdClientId) {
+    // El token viaja por query string porque el navegador no permite enviar
+    // headers en `new WebSocket()`. Estar en Firebase es la autorizacion: no hay
+    // allow-list local que chequear.
+    if (isAuthEnabled()) {
       if (!token) {
         socket.close(4401, "Token requerido");
         return;
       }
       try {
-        const payload = await verifyAccessToken(token);
-        const email = (payload["email"] || payload["preferred_username"] || "") as string;
-        if ((config.allowedDomains || config.allowedEmails) && !isEmailAllowed(email)) {
-          socket.close(4403, "Acceso no autorizado");
-          return;
-        }
+        await verifyIdToken(token);
       } catch {
         socket.close(4401, "Token invalido o expirado");
         return;

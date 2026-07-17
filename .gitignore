@@ -5,3 +5,4 @@ node_modules
 storage
 data
 *.log
+dist

@@ -16,6 +16,7 @@ import { classifyDocument, inferConcept } from "./utils/classifier";
 import { createSha256 } from "./utils/hash";
 import { AttachedFile, EmailRecord, ExtractedFields, IncomingMetadata, SunatValidacion } from "./types";
 import { requireAuth } from "./middleware/auth";
+import { isAuthEnabled } from "./services/firebaseAuth";
 import { broadcastDocumentDeleted, broadcastDocumentUpdated, broadcastNewDocument } from "./services/realtime";
 
 // fieldSize de 100MB: Workato envía archivos como hex en campos de texto
@@ -965,16 +966,18 @@ function folderName(value: string): string {
 
 const BUILD_TIME = new Date().toISOString();
 
+// Config publica de Firebase para el frontend. Va sin requireAuth a proposito:
+// el front la necesita antes de poder tener un token, y apiKey/authDomain son
+// valores publicos (no son secretos; la seguridad la da verifyIdToken).
 router.get("/auth/config", (_req, res) => {
-  if (!config.azureAdTenantId || !config.azureAdClientId || !config.azureAdFrontendClientId) {
+  if (!isAuthEnabled()) {
     return res.json({ enabled: false });
   }
   return res.json({
     enabled: true,
-    tenantId: config.azureAdTenantId,
-    frontendClientId: config.azureAdFrontendClientId,
-    apiClientId: config.azureAdClientId,
-    scope: `api://${config.azureAdClientId}/access_as_user`,
+    apiKey: config.firebaseApiKey,
+    authDomain: config.firebaseAuthDomain,
+    projectId: config.firebaseProjectId,
   });
 });
 
@@ -1166,7 +1169,7 @@ router.delete("/documents/:id", requireAuth, async (req, res) => {
     }
   }
 
-  await repository.delete(item.id, item.empresa);
+  await repository.delete(item.id);
   broadcastDocumentDeleted(item.id);
   return res.status(204).end();
 });

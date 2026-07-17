@@ -7,7 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet" />
-    <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       body {
@@ -50,8 +51,32 @@
         color: #7a9ec0;
         font-size: 14px;
         line-height: 1.6;
-        margin-bottom: 36px;
+        margin-bottom: 32px;
       }
+      .field { text-align: left; margin-bottom: 16px; }
+      .field label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: #8ab4d4;
+        margin-bottom: 7px;
+      }
+      .field input {
+        width: 100%;
+        padding: 12px 14px;
+        background: #070c1a;
+        border: 1px solid rgba(79, 215, 255, 0.2);
+        border-radius: 8px;
+        color: #eef4ff;
+        font-family: 'Manrope', sans-serif;
+        font-size: 14px;
+        transition: border-color 0.15s;
+      }
+      .field input:focus {
+        outline: none;
+        border-color: #4fd7ff;
+      }
+      .field input:disabled { opacity: 0.5; }
       .btn {
         display: inline-flex;
         align-items: center;
@@ -59,6 +84,7 @@
         gap: 10px;
         width: 100%;
         padding: 14px 24px;
+        margin-top: 8px;
         background: #1f6fff;
         color: #fff;
         border: none;
@@ -84,71 +110,109 @@
     <div class="card">
       <span class="brand">Sistema Automatizado de Facturas</span>
       <h1>Bienvenido</h1>
-      <p class="subtitle">Inicia sesión con tu cuenta Microsoft para acceder al panel de procesamiento documental.</p>
-      <button class="btn" id="loginBtn" disabled>
-        <svg width="20" height="20" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <rect width="10" height="10" fill="#f25022"/>
-          <rect x="11" width="10" height="10" fill="#7fba00"/>
-          <rect y="11" width="10" height="10" fill="#00a4ef"/>
-          <rect x="11" y="11" width="10" height="10" fill="#ffb900"/>
-        </svg>
-        Iniciar sesión con Microsoft
-      </button>
+      <p class="subtitle">Inicia sesión para acceder al panel de procesamiento documental.</p>
+
+      <form id="loginForm">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" autocomplete="username" required disabled />
+        </div>
+        <div class="field">
+          <label for="password">Contraseña</label>
+          <input type="password" id="password" autocomplete="current-password" required disabled />
+        </div>
+        <button class="btn" id="loginBtn" type="submit" disabled>Iniciar sesión</button>
+      </form>
+
       <p class="status" id="status">Cargando configuración...</p>
     </div>
 
     <script>
-      const statusEl = document.getElementById('status');
-      const loginBtn = document.getElementById('loginBtn');
+      var statusEl = document.getElementById('status');
+      var loginBtn = document.getElementById('loginBtn');
+      var emailEl = document.getElementById('email');
+      var passwordEl = document.getElementById('password');
+      var formEl = document.getElementById('loginForm');
 
       function setError(msg) {
         statusEl.className = 'status error';
         statusEl.textContent = msg;
-        loginBtn.disabled = false;
+      }
+
+      function setEnabled(enabled) {
+        loginBtn.disabled = !enabled;
+        emailEl.disabled = !enabled;
+        passwordEl.disabled = !enabled;
+      }
+
+      // Firebase devuelve codigos genericos a proposito (no revela si el email
+      // existe); se traducen a un mensaje util sin filtrar esa informacion.
+      function messageFor(err) {
+        switch (err && err.code) {
+          case 'auth/invalid-credential':
+          case 'auth/wrong-password':
+          case 'auth/user-not-found':
+            return 'Email o contraseña incorrectos.';
+          case 'auth/invalid-email':
+            return 'El email no tiene un formato válido.';
+          case 'auth/user-disabled':
+            return 'Este usuario está deshabilitado.';
+          case 'auth/too-many-requests':
+            return 'Demasiados intentos fallidos. Esperá unos minutos.';
+          case 'auth/network-request-failed':
+            return 'Sin conexión con el servidor de autenticación.';
+          default:
+            return 'No se pudo iniciar sesión: ' + ((err && err.message) || 'intentá de nuevo.');
+        }
       }
 
       fetch('/api/auth/config')
-        .then(function(r) { return r.json(); })
-        .then(function(cfg) {
+        .then(function (r) { return r.json(); })
+        .then(function (cfg) {
           if (!cfg.enabled) {
             window.location.replace('/');
             return;
           }
 
-          var msalApp = new msal.PublicClientApplication({
-            auth: {
-              clientId: cfg.frontendClientId,
-              authority: 'https://login.microsoftonline.com/' + cfg.tenantId,
-              redirectUri: window.location.origin + '/login.html',
-            },
-            cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false },
+          firebase.initializeApp({
+            apiKey: cfg.apiKey,
+            authDomain: cfg.authDomain,
+            projectId: cfg.projectId,
+          });
+          var auth = firebase.auth();
+
+          // Si ya hay sesion persistida, no tiene sentido mostrar el form.
+          var unsubscribe = auth.onAuthStateChanged(function (user) {
+            unsubscribe();
+            if (user) {
+              window.location.replace('/');
+              return;
+            }
+            statusEl.textContent = '';
+            setEnabled(true);
+            emailEl.focus();
           });
 
-          msalApp.handleRedirectPromise()
-            .then(function(response) {
-              if (response) {
+          formEl.addEventListener('submit', function (event) {
+            event.preventDefault();
+            setEnabled(false);
+            statusEl.className = 'status';
+            statusEl.textContent = 'Verificando...';
+
+            auth
+              .signInWithEmailAndPassword(emailEl.value.trim(), passwordEl.value)
+              .then(function () {
                 window.location.replace('/');
-                return;
-              }
-              var accounts = msalApp.getAllAccounts();
-              if (accounts.length > 0) {
-                window.location.replace('/');
-                return;
-              }
-              statusEl.textContent = '';
-              loginBtn.disabled = false;
-              loginBtn.addEventListener('click', function() {
-                loginBtn.disabled = true;
-                statusEl.className = 'status';
-                statusEl.textContent = 'Redirigiendo a Microsoft...';
-                msalApp.loginRedirect({ scopes: [cfg.scope] });
+              })
+              .catch(function (err) {
+                setError(messageFor(err));
+                setEnabled(true);
+                passwordEl.value = '';
+                passwordEl.focus();
               });
-            })
-            .catch(function(err) {
-              setError('Error al iniciar sesión: ' + (err.message || 'intente de nuevo.'));
-            });
+          });
         })
-        .catch(function() {
+        .catch(function () {
           setError('No se pudo conectar con el servidor.');
         });
     </script>

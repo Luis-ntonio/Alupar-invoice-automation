@@ -1,48 +1,66 @@
-// --- Auth (MSAL) ------------------------------------------------------------
-let _msalApp = null;
-let _msalAccount = null;
-let _msalScope = null;
+// --- Auth (Firebase Authentication) -----------------------------------------
+// El backend solo valida el ID token (middleware/auth.ts). apiKey y authDomain
+// llegan desde /api/auth/config: son valores publicos, no secretos.
+let _firebaseAuth = null;
+let _authUser = null;
 let _authEnabled = false;
+
+function waitForAuthState() {
+  // onAuthStateChanged dispara una vez que Firebase restauro (o descarto) la
+  // sesion persistida; sin esperarlo, un reload redirige a login aunque la
+  // sesion siga siendo valida.
+  return new Promise((resolve) => {
+    const unsubscribe = _firebaseAuth.onAuthStateChanged((user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+}
 
 async function initAuth() {
   let cfg;
   try {
     cfg = await fetch("/api/auth/config").then((r) => r.json());
   } catch {
-    return true;
+    // Falla cerrado: si no se puede saber si hay auth, se asume que si. Antes
+    // esto devolvia true y la app corria sin login ante cualquier error de red.
+    window.location.replace("/login.html");
+    return false;
   }
   if (!cfg.enabled) return true;
 
   _authEnabled = true;
-  _msalScope = cfg.scope;
 
-  _msalApp = new msal.PublicClientApplication({
-    auth: {
-      clientId: cfg.frontendClientId,
-      authority: "https://login.microsoftonline.com/" + cfg.tenantId,
-      redirectUri: window.location.origin + "/login.html",
-    },
-    cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: false },
-  });
+  if (!firebase.apps.length) {
+    firebase.initializeApp({
+      apiKey: cfg.apiKey,
+      authDomain: cfg.authDomain,
+      projectId: cfg.projectId,
+    });
+  }
+  _firebaseAuth = firebase.auth();
 
-  await _msalApp.handleRedirectPromise();
-
-  const accounts = _msalApp.getAllAccounts();
-  if (!accounts.length) {
+  const user = await waitForAuthState();
+  if (!user) {
     window.location.replace("/login.html");
     return false;
   }
 
-  _msalAccount = accounts[0];
-  showUserBadge(_msalAccount);
+  _authUser = user;
+  showUserBadge(user);
   return true;
 }
 
 async function getToken() {
-  if (!_authEnabled || !_msalApp || !_msalAccount) return null;
+  if (!_authEnabled || !_firebaseAuth) return null;
+  const user = _firebaseAuth.currentUser || _authUser;
+  if (!user) {
+    window.location.replace("/login.html");
+    return null;
+  }
   try {
-    const r = await _msalApp.acquireTokenSilent({ scopes: [_msalScope], account: _msalAccount });
-    return r.accessToken;
+    // getIdToken renueva solo si el token esta vencido (duran 1h).
+    return await user.getIdToken();
   } catch {
     window.location.replace("/login.html");
     return null;
@@ -56,17 +74,21 @@ async function authFetch(url, options = {}) {
   return fetch(url, Object.assign({}, options, { headers }));
 }
 
-function showUserBadge(account) {
+function showUserBadge(user) {
   const nav = document.querySelector(".menu");
   if (!nav) return;
   const div = document.createElement("div");
   div.style.cssText = "display:flex;align-items:center;gap:12px;font-size:13px;color:#8ab4d4;margin-left:8px";
   div.innerHTML =
-    '<span>' + escHtml(account.name || account.username || "") + "</span>" +
+    '<span>' + escHtml(user.displayName || user.email || "") + "</span>" +
     '<button id="logoutBtn" style="padding:5px 12px;background:transparent;border:1px solid rgba(79,215,255,0.3);border-radius:6px;color:#4fd7ff;font-size:12px;cursor:pointer;font-family:inherit">Salir</button>';
   nav.after(div);
-  document.getElementById("logoutBtn").addEventListener("click", () => {
-    _msalApp.logoutRedirect({ account: _msalAccount, postLogoutRedirectUri: "/login.html" });
+  document.getElementById("logoutBtn").addEventListener("click", async () => {
+    try {
+      await _firebaseAuth.signOut();
+    } finally {
+      window.location.replace("/login.html");
+    }
   });
 }
 
@@ -79,6 +101,9 @@ function openRealtime(onMessage) {
   let closedByUser = false;
 
   async function connect() {
+    // El token va por query string porque el navegador no deja mandar headers
+    // en `new WebSocket()`. Se pide en cada connect(), asi cada reconexion usa
+    // uno fresco en vez de arrastrar el vencido.
     const token = await getToken();
     if (_authEnabled && !token) return; // getToken ya redirige a login si hace falta
 

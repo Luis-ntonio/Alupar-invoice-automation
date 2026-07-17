@@ -1,10 +1,16 @@
-# GCP Real Flow - Cloud Run + Workato + Firestore + Document AI
+# GCP Real Flow - Cloud Run + Workato + Firestore + Document AI + Firebase Auth
 
 Esta carpeta contiene lo necesario para levantar el flujo real en GCP.
 
+La app corre 100% en GCP: Cloud Storage, Firestore, Document AI y Firebase
+Authentication. No hay dependencias de Azure. La implementación anterior sobre
+Azure (Blob, Cosmos DB, Entra ID/MSAL) queda en la rama `legacy-azure`.
+
 ## Contenido
 
-- `setup-gcp.ps1`: habilita APIs, crea buckets, service account y permisos IAM.
+- `setup-gcp.ps1`: habilita APIs, crea buckets, service account, permisos IAM,
+  Firestore, el procesador de Document AI y configura Firebase Auth.
+- `add-user.ps1`: crea usuarios de Firebase Auth con email/contraseña.
 - `deploy-cloudrun.ps1`: build y deploy en Cloud Run con variables de entorno.
 - `env.cloudrun.example`: variables de ejemplo para entorno real.
 - `workato-http-intake.json`: ejemplo de contrato de request para Workato.
@@ -23,19 +29,59 @@ Esta carpeta contiene lo necesario para levantar el flujo real en GCP.
 ```
 
 El script:
-- Habilita APIs de Run, Build, Artifact Registry, Firestore, Storage y Document AI.
+- Habilita APIs de Run, Build, Artifact Registry, Firestore, Storage, Document AI,
+  Identity Toolkit y Firebase.
 - Crea buckets raw/exports.
 - Crea service account para Cloud Run.
 - Asigna roles para Storage, Firestore y Document AI.
+- Inicializa Firestore en modo nativo.
 - Crea el procesador de Document AI (tipo INVOICE_PROCESSOR).
+- Registra Firebase, crea la web app y habilita el login por email/contraseña.
 
-## 3) Deploy Cloud Run
+Al terminar imprime el **Document AI Processor ID** y la **Firebase API Key**:
+los dos hacen falta para el deploy.
+
+Es idempotente: se puede volver a correr sobre un proyecto ya provisionado y
+reutiliza lo que exista (buckets, SA, processor, web app).
+
+## 3) Crear usuarios
+
+Estar en Firebase Authentication **es** la autorización: no hay allow-list ni
+roles. Cualquier usuario que exista puede entrar al dashboard.
 
 ```powershell
-./gcp-real/deploy-cloudrun.ps1 -ProjectId "tu-proyecto" -Region "us-central1" -DocumentAiLocation "us" -ServiceName "proyecto2-facturas" -RawBucket "tu-proyecto-raw" -ExportsBucket "tu-proyecto-exports" -DocumentAiProcessorId "<processor-id>" -WorkatoSharedSecret "<secreto>"
+./gcp-real/add-user.ps1 -ProjectId "tu-proyecto" -Email "alguien@empresa.com"
 ```
 
-## 4) Conectar Workato
+Genera una contraseña al azar y la imprime una sola vez (Firebase guarda solo el
+hash). Para fijarla vos: `-Password "..."`. Para cambiar la de un usuario que ya
+existe: `-Password "..." -ResetPassword`.
+
+También se pueden administrar desde la consola de Firebase
+(Authentication > Users) en https://console.firebase.google.com.
+
+## 4) Deploy Cloud Run
+
+```powershell
+./gcp-real/deploy-cloudrun.ps1 -ProjectId "tu-proyecto" -Region "us-central1" -DocumentAiLocation "us" -ServiceName "proyecto2-facturas" -RawBucket "tu-proyecto-raw" -ExportsBucket "tu-proyecto-exports" -DocumentAiProcessorId "<processor-id>" -WorkatoSharedSecret "<secreto>" -FirebaseApiKey "<api-key>"
+```
+
+`-FirebaseApiKey` es obligatoria. Con `NODE_ENV=production`, si falta, el
+servicio **no levanta**: es a propósito. La alternativa —arrancar sin exigir
+login— dejaría las facturas accesibles sin token, así que una env var ausente
+cierra la app en vez de abrirla.
+
+El servicio se despliega con `--allow-unauthenticated`, que es lo correcto: es
+una web pública y el login lo resuelve la app (Firebase ID token verificado en
+`src/middleware/auth.ts`), no el gate de plataforma de Cloud Run.
+
+Verificación después del deploy — sin token debe dar **401**:
+
+```powershell
+(Invoke-WebRequest "https://<cloud-run-url>/api/documents" -SkipHttpErrorCheck).StatusCode
+```
+
+## 5) Conectar Workato
 
 - Endpoint: `https://<cloud-run-url>/api/intake`
 - Method: `POST`
@@ -46,7 +92,7 @@ El script:
 
 Ejemplo de payload en `workato-http-intake.json`.
 
-## 5) MVP local - ubicacion de PDFs/XML
+## 6) MVP local - ubicacion de PDFs/XML
 
 Para el MVP local no necesitas GCP.
 
