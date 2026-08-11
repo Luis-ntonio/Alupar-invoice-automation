@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Centros de costo manuales</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-in wrap">
+        <a class="brand" href="index.html">SISTEMA AUTOMATIZADO DE FACTURAS <span class="tag-live"><span class="dot"></span>Panel operativo</span></a>
+        <nav class="menu">
+          <a href="index.html">Dashboard</a>
+          <a href="coes.html">COES VTEA/VTP</a>
+          <a href="centros-manual.html">Centros manuales</a>
+          <a href="fallidas.html">Facturas fallidas</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap page-shell">
+      <section class="panel" id="uploadPanel">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-copy">
+              <span class="toolbar-title">1. Cargar excel mensual</span>
+              <span class="toolbar-subtitle">Un solo archivo con varias hojas, una por centro de costo. Se sube cada mes; el archivo mas reciente que se asigne a un centro de costo pasa a ser la fuente vigente para ese codigo.</span>
+            </div>
+          </div>
+        </div>
+        <div class="coes-controls">
+          <label class="coes-field">
+            <span>Archivo (.xlsx)</span>
+            <input id="manualFileInput" type="file" accept=".xlsx" />
+          </label>
+          <button id="manualUploadBtn" class="btn-primary" type="button">Subir</button>
+        </div>
+        <p id="uploadStatus" class="status-line"></p>
+      </section>
+
+      <section class="panel" id="assignPanel">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-copy">
+              <span class="toolbar-title">2. Asignar hojas a centros de costo</span>
+              <span class="toolbar-subtitle">Elige la hoja del archivo subido y las columnas (letras, ej. "A") de nombre de proveedor, RUC y donde empiezan los montos. Deja sin hoja los codigos que no cambian este mes.</span>
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Centro de costo</th>
+                <th>Hoja</th>
+                <th>Col. nombre</th>
+                <th>Col. RUC</th>
+                <th>Col. inicio montos</th>
+              </tr>
+            </thead>
+            <tbody id="mappingRows"></tbody>
+          </table>
+        </div>
+        <div class="coes-controls">
+          <button id="manualAssignBtn" class="btn-primary" type="button">Guardar asignaciones</button>
+        </div>
+        <p id="assignStatus" class="status-line"></p>
+        <div id="assignSummary"></div>
+      </section>
+
+      <section class="panel" id="activePanel">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-copy">
+              <span class="toolbar-title">Fuentes activas</span>
+              <span class="toolbar-subtitle">Ultima carga vigente por centro de costo. Las facturas nuevas de estos codigos se validan contra el archivo indicado.</span>
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Centro de costo</th>
+                <th>Hoja</th>
+                <th>Archivo</th>
+                <th>Cargado</th>
+              </tr>
+            </thead>
+            <tbody id="activeRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="auth.js"></script>
+    <script src="centros-manual.js"></script>
+  </body>
+</html>

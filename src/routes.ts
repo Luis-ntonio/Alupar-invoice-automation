@@ -8,8 +8,24 @@ import { BlobStorageService } from "./services/blobStorage";
 import { detectFileType, extractFields } from "./services/parser";
 import { createRepository } from "./services/repository";
 import { CoesDataset, runCoesAutoSync, syncCoesMonthlyRequiredFiles, listCoesIndex } from "./services/coesService";
-import { resolveCentroCostos, getCoesMatrixForPeriod, verifyCoesAmountForPeriod } from "./services/centroCostosService";
-import { resolveCentroCostosCode } from "./services/centroCostosCatalog";
+import {
+  resolveCentroCostos,
+  getCoesMatrixForPeriod,
+  verifyCoesAmountForPeriod,
+  buildSplitEmailRecords,
+  revalidatePendingManualCentroCosto,
+  hasAutoCoesSource,
+  CentroCostosResult,
+} from "./services/centroCostosService";
+import {
+  uploadManualWorkbook,
+  assignManualMappings,
+  listActiveManualSources,
+  loadManualIndex,
+  ManualMappingInput,
+} from "./services/manualCentroCostoService";
+import { resolveCentroCostosCode, CENTRO_COSTOS_CATALOG } from "./services/centroCostosCatalog";
+import { buildFacturasExcelBuffer } from "./services/excelExportService";
 import { validarEnSunat } from "./services/sunatService";
 import { extractSupportedZipEntries, extractZipContents, filterAccessibleFiles, streamZipToWritable } from "./services/zipService";
 import { classifyDocument, inferConcept } from "./utils/classifier";
@@ -618,6 +634,11 @@ type IntakeSuccessResult = {
     rejected: number;
     duplicate?: boolean;
     record: EmailRecord;
+    // Poblado solo cuando la factura pago mas de un centro de costo y se
+    // dividio automaticamente en varios registros (ver processIntakeFiles).
+    // `record` arriba queda como el primero de este arreglo, por compatibilidad
+    // con consumidores existentes del campo singular.
+    records?: EmailRecord[];
   };
 };
 
@@ -844,15 +865,6 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
   const documentType = classifyDocument(extracted);
   const concept = (extracted as any).concepto ?? inferConcept(extracted);
 
-  // resolveCentroCostos se conserva por la validacion de monto COES (coesValidacion).
-  // El valor de centroCostos ya NO se toma de aqui: ahora se deriva del concepto
-  // via catalogo por keywords y solo aplica a facturas (ver mas abajo).
-  const centroCostosResult: { centroCostos?: string; coesValidacion?: EmailRecord["coesValidacion"] } =
-    await resolveCentroCostos(extracted as ExtractedFields, blobStorage).catch((err) => {
-      console.warn("[centroCostos] Resolucion fallo:", err instanceof Error ? err.message : err);
-      return {};
-    });
-
   // Centro de costos: dependiente del concepto y solo para facturas. Se usa el
   // texto del concepto (+ snippet como respaldo) para el match best-effort; si no
   // hay coincidencia queda vacio para asignacion manual desde el dashboard.
@@ -862,6 +874,20 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
           [(extracted as any).concepto, (extracted as any).rawTextSnippet].filter(Boolean).join(" ")
         )
       : undefined;
+
+  // resolveCentroCostos se conserva por la validacion de monto COES
+  // (coesValidacion), usando el mismo codigo de centro de costo ya resuelto
+  // arriba para elegir la fuente COES (dataset+hoja) correcta. Tambien puede
+  // devolver una reasignacion (otra fuente calzo sola) o una division en
+  // varios centros de costo (splitMatches, ver mas abajo).
+  const centroCostosResult: CentroCostosResult = await resolveCentroCostos(
+    centroCostos,
+    extracted as ExtractedFields,
+    blobStorage
+  ).catch((err) => {
+    console.warn("[centroCostos] Resolucion fallo:", err instanceof Error ? err.message : err);
+    return {};
+  });
 
   let sunatValidacion: SunatValidacion | undefined;
   const numDoc = (extracted as any).numeroDocumento as string | undefined;
@@ -890,23 +916,49 @@ async function processIntakeFiles(files: Express.Multer.File[], metadata: Incomi
     }
   }
 
-  const record: EmailRecord = {
-    id: requestId,
+  const baseFields = {
     metadata,
     files: attachedFiles,
     extracted,
     documentType,
     concept,
     empresa: (extracted as any).emisor ?? "",
-    centroCostos,
     fideicomiso: detectFideicomiso(extracted),
     ruc: (extracted as any).ruc ?? "",
     sunatValidacion,
-    coesValidacion: centroCostosResult.coesValidacion,
-    status: extractionError ? "error" : "pendiente",
+    status: (extractionError ? "error" : "pendiente") as EmailRecord["status"],
     error: extractionError,
     createdAt: now,
     updatedAt: now,
+  };
+
+  // Factura que paga mas de un centro de costo: se genera un EmailRecord por
+  // cada fuente COES que participo de la suma, todos apuntando a los mismos
+  // archivos adjuntos (misma factura fisica) y al mismo numeroDocumento
+  // ("Codigo de Factura"), que es el vinculo visual entre las filas divididas
+  // tanto en el dashboard como en el Excel de exportacion -- no hace falta
+  // ninguna columna nueva para eso. El monto de cada registro es la parte
+  // proporcional (con IGV) que calzo en esa fuente.
+  if (centroCostosResult.splitMatches && centroCostosResult.splitMatches.length >= 2) {
+    const draft: EmailRecord = { id: requestId, ...baseFields, centroCostos, coesValidacion: undefined };
+    const records = buildSplitEmailRecords(draft, centroCostosResult.splitMatches);
+
+    for (const r of records) {
+      await repository.save(r);
+      broadcastNewDocument(r);
+    }
+
+    return {
+      statusCode: 202,
+      body: { requestId, accepted: attachedFiles.length, rejected, record: records[0], records },
+    };
+  }
+
+  const record: EmailRecord = {
+    id: requestId,
+    ...baseFields,
+    centroCostos: centroCostosResult.reassignedCentroCostoCode ?? centroCostos,
+    coesValidacion: centroCostosResult.coesValidacion,
   };
 
   await repository.save(record);
@@ -1022,7 +1074,8 @@ router.get("/coes/periods", requireAuth, async (_req, res) => {
 });
 
 const coesMatrixQuerySchema = z.object({
-  dataset: z.enum(["vtea", "vtp"]),
+  dataset: z.enum(["vtea", "vtp", "sst", "scio"]),
+  sheet: z.string().trim().min(1),
   year: z.coerce.number().int(),
   month: z.coerce.number().int().min(1).max(12),
 });
@@ -1030,10 +1083,10 @@ const coesMatrixQuerySchema = z.object({
 router.get("/coes/matrix", requireAuth, async (req, res) => {
   const parsed = coesMatrixQuerySchema.safeParse(req.query);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Parametros invalidos. Se requiere dataset (vtea|vtp), year y month." });
+    return res.status(400).json({ error: "Parametros invalidos. Se requiere dataset (vtea|vtp|sst|scio), sheet, year y month." });
   }
-  const { dataset, year, month } = parsed.data;
-  const matrix = await getCoesMatrixForPeriod(dataset as CoesDataset, { year, month }, blobStorage);
+  const { dataset, sheet, year, month } = parsed.data;
+  const matrix = await getCoesMatrixForPeriod(dataset as CoesDataset, sheet, { year, month }, blobStorage);
   if (!matrix) {
     return res.status(404).json({ error: `No se encontro el excel COES ${dataset.toUpperCase()} para ${month}/${year}.` });
   }
@@ -1041,7 +1094,8 @@ router.get("/coes/matrix", requireAuth, async (req, res) => {
 });
 
 const coesVerifyBodySchema = z.object({
-  dataset: z.enum(["vtea", "vtp"]),
+  dataset: z.enum(["vtea", "vtp", "sst", "scio"]),
+  sheet: z.string().trim().min(1),
   year: z.number().int(),
   month: z.number().int().min(1).max(12),
   supplierRuc: z.string().trim().min(1),
@@ -1051,11 +1105,79 @@ const coesVerifyBodySchema = z.object({
 router.post("/coes/verify", requireAuth, async (req, res) => {
   const parsed = coesVerifyBodySchema.safeParse(req.body ?? {});
   if (!parsed.success) {
-    return res.status(400).json({ error: "Payload invalido. Se requiere dataset, year, month, supplierRuc y monto." });
+    return res.status(400).json({ error: "Payload invalido. Se requiere dataset, sheet, year, month, supplierRuc y monto." });
   }
-  const { dataset, year, month, supplierRuc, monto } = parsed.data;
-  const result = await verifyCoesAmountForPeriod(dataset as CoesDataset, { year, month }, supplierRuc, monto, blobStorage);
+  const { dataset, sheet, year, month, supplierRuc, monto } = parsed.data;
+  const result = await verifyCoesAmountForPeriod(dataset as CoesDataset, sheet, { year, month }, supplierRuc, monto, blobStorage);
   return res.json(result);
+});
+
+// Carga manual mensual de excels COES para centros de costo sin fuente
+// automatica (ver plan-centros-costo-multicentro.md / centros-de-costo-coes.md).
+// Flujo en 2 pasos: subir el archivo (devuelve las hojas disponibles) y luego
+// asignar hoja+layout de columnas por centro de costo.
+router.post("/coes/manual/upload", requireAuth, upload.single("file"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "Se requiere un archivo (campo 'file')." });
+  }
+  try {
+    const result = await uploadManualWorkbook(req.file.buffer, req.file.originalname, blobStorage);
+    return res.json(result);
+  } catch (err) {
+    return res.status(400).json({ error: `No se pudo leer el excel: ${err instanceof Error ? err.message : String(err)}` });
+  }
+});
+
+const manualAssignBodySchema = z.object({
+  storagePath: z.string().trim().min(1),
+  fileName: z.string().trim().min(1),
+  mappings: z
+    .array(
+      z.object({
+        centroCostoCode: z.string().trim().min(1),
+        sheet: z.string().trim().min(1),
+        nameColumn: z.number().int().min(1),
+        supplierColumn: z.number().int().min(1),
+        dataStartColumn: z.number().int().min(1),
+      })
+    )
+    .min(1),
+});
+
+router.post("/coes/manual/assign", requireAuth, async (req, res) => {
+  const parsed = manualAssignBodySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Payload invalido. Se requiere storagePath, fileName y al menos un mapping (centroCostoCode, sheet, nameColumn, supplierColumn, dataStartColumn)." });
+  }
+  const { storagePath, fileName, mappings } = parsed.data;
+
+  const catalogCodes = new Set(CENTRO_COSTOS_CATALOG.map((c) => c.code));
+  for (const mapping of mappings) {
+    if (!catalogCodes.has(mapping.centroCostoCode)) {
+      return res.status(400).json({ error: `Codigo de centro de costo no reconocido: ${mapping.centroCostoCode}.` });
+    }
+    if (hasAutoCoesSource(mapping.centroCostoCode)) {
+      return res.status(400).json({ error: `${mapping.centroCostoCode} ya tiene validacion automatica -- no se puede cargar una fuente manual para el.` });
+    }
+  }
+
+  const { saved, warnings } = await assignManualMappings(storagePath, fileName, mappings as ManualMappingInput[], blobStorage);
+
+  const revalidation: Record<string, { checked: number; updated: number; split: number }> = {};
+  for (const entry of saved) {
+    revalidation[entry.centroCostoCode] = await revalidatePendingManualCentroCosto(entry.centroCostoCode, repository, blobStorage);
+  }
+
+  return res.json({ saved, warnings, revalidation });
+});
+
+router.get("/coes/manual", requireAuth, async (_req, res) => {
+  const eligibleCodes = CENTRO_COSTOS_CATALOG.filter((c) => !hasAutoCoesSource(c.code)).map((c) => ({
+    code: c.code,
+    concepto: c.concepto,
+  }));
+  const [active, history] = await Promise.all([listActiveManualSources(blobStorage), loadManualIndex(blobStorage)]);
+  return res.json({ eligibleCodes, active, history });
 });
 
 router.post("/intake", upload.any(), async (req, res) => {
@@ -1348,6 +1470,29 @@ router.post("/exports", requireAuth, async (req, res) => {
   for (const { record } of records) {
     await repository.save({ ...record, status: "procesado", updatedAt: now });
   }
+});
+
+router.post("/exports/excel", requireAuth, async (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? (req.body.ids as unknown[]).filter((id): id is string => typeof id === "string") : [];
+  if (!ids.length) {
+    return res.status(400).json({ error: "Se requiere un array de ids para exportar." });
+  }
+
+  const records: EmailRecord[] = [];
+  for (const id of ids) {
+    const rec = await repository.findById(id);
+    if (rec) records.push(rec);
+  }
+
+  if (!records.length) {
+    return res.status(404).json({ error: "No se encontraron registros para los IDs indicados." });
+  }
+
+  const buffer = await buildFacturasExcelBuffer(records);
+  const dateStr = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="facturas-${dateStr}.xlsx"`);
+  res.send(buffer);
 });
 
 export default router;

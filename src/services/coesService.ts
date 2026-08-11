@@ -5,9 +5,13 @@ import { BlobStorageService } from "./blobStorage";
 const COES_INDEX_PATH = "coes/coes-index.json";
 const INFORME_CODE_REGEX = /COES\/D\/DO\/SME-INF-\d+-\d{4}/i;
 
-const INFORME_CELL: Record<CoesDataset, { sheet: string; address: string }> = {
+const INFORME_CELL: Partial<Record<CoesDataset, { sheet: string; address: string }>> = {
 	vtea: { sheet: "CUADRO 1", address: "D3" },
 	vtp: { sheet: "C3", address: "B4" },
+	sst: { sheet: "Cuadro 2", address: "O4" },
+	// Verificado abriendo observaciones/2_Cuadro de Liquidacion 06-26 _inf
+	// 125-2026.xlsx: Cuadro 1!U4 trae el string plano "COES/D/DO/SME-INF-125-2026".
+	scio: { sheet: "Cuadro 1", address: "U4" },
 };
 
 export interface CoesIndexEntry {
@@ -57,6 +61,20 @@ export async function listCoesIndex(blobStorage: BlobStorageService): Promise<Co
 	return loadCoesIndex(blobStorage);
 }
 
+// A diferencia de findCoesIndexEntry (requiere ya conocer el informeCode), esta
+// busca por dataset+periodo -- caso de resolveCentroCostos, que conoce el
+// periodo de la factura pero no el codigo de informe hasta sincronizar el excel.
+export async function findCoesIndexEntryForPeriod(
+	dataset: CoesDataset,
+	period: CoesSyncPeriod,
+	blobStorage: BlobStorageService
+): Promise<CoesIndexEntry | undefined> {
+	const entries = await loadCoesIndex(blobStorage);
+	return entries.find(
+		(e) => e.dataset === dataset && e.period.year === period.year && e.period.month === period.month
+	);
+}
+
 export function getExpectedStoragePath(dataset: CoesDataset, period: CoesSyncPeriod): string {
 	const cfg = datasetConfig(dataset);
 	const fileName = cfg.fileName(period.year, period.month);
@@ -72,6 +90,7 @@ async function indexCoesFile(
 ): Promise<void> {
 	try {
 		const cell = INFORME_CELL[dataset];
+		if (!cell) return;
 		const workbook = new ExcelJS.Workbook();
 		await workbook.xlsx.load(buffer as any);
 		const sheet = workbook.getWorksheet(cell.sheet);
@@ -94,6 +113,21 @@ async function indexCoesFile(
 const COES_DOWNLOAD_BASE = "https://www.coes.org.pe/Portal/browser/download?url=";
 const COES_VTEA_BASE_PATH = "Mercado Mayorista/Liquidaciones del MME/01 Mercado de Corto Plazo/Liquidaciones VTEA";
 const COES_VTP_BASE_PATH = "Mercado Mayorista/Liquidaciones del MME/01 Mercado de Corto Plazo/Liquidaciones VTP";
+// Ruta completa confirmada navegando el portal COES el 2026-08-02: al dataset
+// le faltaban las dos carpetas padre ("Post Operación/Valorización de
+// Transferencias/") y el nombre real es "Responsabilidades" (plural), no
+// "Responsabilidad" (singular) -- por eso syncCoesMonthlyDataset("sst", ...)
+// fallaba siempre con "not_available" pese a que el informe si estaba publicado.
+const COES_SST_BASE_PATH =
+	"Post Operación/Valorización de Transferencias/Asignación de Responsabilidades de Pago SST y SCT";
+// Ruta confirmada por el usuario el 2026-08-04 (misma seccion del portal que
+// VTEA/VTP, .../mercadomayorista/liquidaciones): "Liquidaciones del MME/02
+// Servicios Complementarios e Inflexibilidades Operativas/Liquidaciones
+// LSCIO/2026/05 Mayo/3. Liquidacion/Cuadro de Liquidacion 05-26.xlsx". Se
+// antepone "Mercado Mayorista/" por consistencia con VTEA_BASE_PATH/VTP_BASE_PATH
+// (misma seccion del portal) -- a confirmar empiricamente con la sincronizacion real.
+const COES_SCIO_BASE_PATH =
+	"Mercado Mayorista/Liquidaciones del MME/02 Servicios Complementarios e Inflexibilidades Operativas/Liquidaciones LSCIO";
 const UA =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36";
 
@@ -117,7 +151,7 @@ export interface CoesSyncPeriod {
 	month: number;
 }
 
-export type CoesDataset = "vtea" | "vtp";
+export type CoesDataset = "vtea" | "vtp" | "sst" | "scio";
 
 export type CoesDownloadStatus = "downloaded" | "already_exists" | "not_available";
 
@@ -137,6 +171,10 @@ interface CoesDatasetConfig {
 	basePath: string;
 	fileName: (year: number, month: number) => string;
 	storageFolder: string;
+	// Formato de la carpeta de mes dentro de basePath. Por defecto "06_Junio"
+	// (ver monthFolderName), pero no todas las secciones del portal COES usan
+	// ese formato -- ver DATASETS/sst.
+	monthFolderName?: (month: number) => string;
 }
 
 function monthNameEs(month: number): string {
@@ -177,6 +215,33 @@ function coesVtpFileName(year: number, month: number): string {
 	return `ReportesLVTP-${mm}${yy}.xlsx`;
 }
 
+// El archivo vive dentro de una subcarpeta "Ingreso Tarifario/" (confirmado
+// por el usuario: la carpeta remota es ".../Mensual/Ingreso Tarifario/" y el
+// archivo de prueba descargado se llama "IT 05-26.xlsx"). Se incluye la
+// subcarpeta como parte del fileName porque buildRemotePaths ya concatena y
+// codifica el path completo, tolerando "/" internos igual que el resto de
+// paths remotos.
+function coesSstFileName(year: number, month: number): string {
+	const mm = String(month).padStart(2, "0");
+	const yy = String(year).slice(-2);
+	return `Ingreso Tarifario/IT ${mm}-${yy}.xlsx`;
+}
+
+// Igual patron que SST: subcarpeta "3. Liquidacion/" confirmada por el usuario,
+// se embebe en el fileName porque buildRemotePaths ya tolera "/" internos.
+function coesScioFileName(year: number, month: number): string {
+	const mm = String(month).padStart(2, "0");
+	const yy = String(year).slice(-2);
+	return `3. Liquidación/Cuadro de Liquidación ${mm}-${yy}.xlsx`;
+}
+
+// Confirmado por el usuario: la carpeta de mes en esta seccion es "05 Mayo"
+// (dos digitos + espacio + nombre capitalizado), distinta de "05_Mayo"
+// (default VTEA/VTP) y de "05 MAYO" (SST, todo mayusculas).
+function scioMonthFolderName(month: number): string {
+	return `${String(month).padStart(2, "0")} ${monthNameEs(month)}`;
+}
+
 const DATASETS: CoesDatasetConfig[] = [
 	{
 		dataset: "vtea",
@@ -189,6 +254,25 @@ const DATASETS: CoesDatasetConfig[] = [
 		basePath: COES_VTP_BASE_PATH,
 		fileName: coesVtpFileName,
 		storageFolder: "liquidaciones-vtp",
+	},
+	{
+		dataset: "sst",
+		basePath: COES_SST_BASE_PATH,
+		fileName: coesSstFileName,
+		storageFolder: "pagos-sst-sct",
+		// A diferencia de VTEA/VTP (carpeta "06_Junio"), la seccion "Asignacion de
+		// Responsabilidad de Pago SST y SCT" del portal COES nombra la carpeta de
+		// mes como "06 JUNIO" (espacio + mayusculas) -- confirmado navegando el
+		// portal manualmente el 2026-08-02, por lo que syncCoesMonthlyDataset("sst", ...)
+		// fallaba siempre con "not_available" pese a que el informe si estaba publicado.
+		monthFolderName: (month) => `${String(month).padStart(2, "0")} ${monthNameEs(month).toUpperCase()}`,
+	},
+	{
+		dataset: "scio",
+		basePath: COES_SCIO_BASE_PATH,
+		fileName: coesScioFileName,
+		storageFolder: "liquidaciones-scio",
+		monthFolderName: scioMonthFolderName,
 	},
 ];
 
@@ -204,8 +288,13 @@ function datasetConfig(dataset: CoesDataset): CoesDatasetConfig {
 // el archivo en ".../06_Junio/Mensual/archivo.xlsx" y otros directamente en
 // ".../06_Junio/archivo.xlsx" (visto en el VTP de junio 2026). Se devuelven ambas
 // variantes como candidatas y la descarga usa la primera que exista.
-function buildRemotePaths(basePath: string, period: CoesSyncPeriod, fileName: string): string[] {
-	const monthFolder = `${basePath}/${period.year}/${monthFolderName(period.month)}`;
+function buildRemotePaths(
+	basePath: string,
+	period: CoesSyncPeriod,
+	fileName: string,
+	monthFolderFn: (month: number) => string = monthFolderName
+): string[] {
+	const monthFolder = `${basePath}/${period.year}/${monthFolderFn(period.month)}`;
 	return [
 		`${monthFolder}/Mensual/${fileName}`,
 		`${monthFolder}/${fileName}`,
@@ -261,7 +350,7 @@ export async function syncCoesMonthlyDataset(
 ): Promise<CoesDownloadResult> {
 	const cfg = datasetConfig(dataset);
 	const fileName = cfg.fileName(period.year, period.month);
-	const candidatePaths = buildRemotePaths(cfg.basePath, period, fileName);
+	const candidatePaths = buildRemotePaths(cfg.basePath, period, fileName, cfg.monthFolderName);
 	// La primera candidata (con "Mensual/") se usa como representativa para los
 	// resultados already_exists / not_available.
 	const remotePath = candidatePaths[0];

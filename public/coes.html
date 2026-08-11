@@ -17,6 +17,7 @@
         <nav class="menu">
           <a href="index.html">Dashboard</a>
           <a href="coes.html">COES VTEA/VTP</a>
+          <a href="centros-manual.html">Centros manuales</a>
           <a href="fallidas.html">Facturas fallidas</a>
         </nav>
       </div>
@@ -35,10 +36,14 @@
 
         <div class="coes-controls">
           <label class="coes-field">
-            <span>Dataset</span>
+            <span>Centro de costos</span>
             <select id="datasetSelect">
-              <option value="vtea">VTEA</option>
-              <option value="vtp">VTP</option>
+              <option value="vtea:CUADRO 1">VTEA — 004.2.1 Energía Activa</option>
+              <option value="vtp:C3">VTP C3 — 004.1.9 Transferencia de Potencia</option>
+              <option value="vtp:C2">VTP C2 — 004.1.7 Compensación Ingreso Tarifario</option>
+              <option value="vtp:C1">VTP C1 — 004.1.8 Peaje Conexión SPT</option>
+              <option value="sst:Cuadro 2">SST — 004.1.6 Ingreso Tarifario Red MAT</option>
+              <option value="scio:Cuadro 1">SCIO — 004.1.11 Liquidación de SCIO</option>
             </select>
           </label>
           <label class="coes-field">
@@ -54,33 +59,32 @@
         <p id="verifyResult" class="status-line"></p>
       </section>
 
-      <section class="panel" id="coesPanel">
-        <div class="toolbar">
-          <div class="toolbar-left">
-            <div class="toolbar-copy">
-              <span class="toolbar-title">Resumen Alupar</span>
-              <span class="toolbar-subtitle">Solo las contrapartes donde Alupar (La Virgen) participa, para el dataset/periodo seleccionado arriba.</span>
-            </div>
-          </div>
-        </div>
-
-        <p id="matrixStatus" class="status-line"></p>
-
-        <div id="aluparCards"></div>
-      </section>
-
       <section class="panel" id="aluparChartPanel">
         <div class="toolbar">
           <div class="toolbar-left">
             <div class="toolbar-copy">
               <span class="toolbar-title">Montos por empresa</span>
-              <span class="toolbar-subtitle">Comparativo de montos de las contrapartes de Alupar en el periodo seleccionado. Click en una barra o tarjeta para ver su historico.</span>
+              <span class="toolbar-subtitle">Comparativo de montos de las contrapartes de Alupar en el periodo seleccionado. Click en una barra para ver su historico.</span>
             </div>
           </div>
         </div>
+        <p id="matrixStatus" class="status-line"></p>
         <div class="chart-wrap" style="height: 360px">
           <canvas id="aluparChart"></canvas>
         </div>
+      </section>
+
+      <section class="panel" id="centroCostosSummaryPanel">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-copy">
+              <span class="toolbar-title">Desglose por centro de costos</span>
+              <span class="toolbar-subtitle">Contrapartes de Alupar en los centros de costo con validacion COES activa, para el periodo seleccionado arriba. Las tarjetas del centro de costos seleccionado permiten ver su historico.</span>
+            </div>
+          </div>
+        </div>
+        <p id="centroCostosSummaryStatus" class="status-line"></p>
+        <div id="centroCostosSummary"></div>
       </section>
 
       <section class="panel" id="historyPanel" hidden>

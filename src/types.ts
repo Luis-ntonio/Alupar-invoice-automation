@@ -46,8 +46,11 @@ export interface SunatValidacion {
 
 export type CoesValidacionStatus = "validado" | "no_coincide" | "no_encontrado";
 
+// "manual" = validado contra un excel cargado a mano (ver
+// manualCentroCostoService.ts) para un centro de costo sin fuente COES
+// automatica, en vez de un dataset sincronizado del portal.
 export interface CoesValidacion {
-  dataset: "vtea" | "vtp";
+  dataset: "vtea" | "vtp" | "sst" | "scio" | "manual";
   informeCode?: string;
   montoFactura: number;
   montoEsperado?: number;
